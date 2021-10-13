@@ -5,6 +5,8 @@ edition = "2021"
 license = "MIT"
 description = "Core features for interacting with the game Devil Daggers"
 repository = "https://github.com/lsaa/ddcore-rs"
+homepage = "https://github.com/lsaa/ddcore-rs"
+documentation = "https://docs.rs/ddcore-rs"
 
 [features]
 default = ["memory", "ddinfo", "ddcl_submit"]

@@ -9,7 +9,7 @@ homepage = "https://github.com/lsaa/ddcore-rs"
 documentation = "https://docs.rs/ddcore-rs"
 
 [features]
-default = ["memory", "ddinfo", "ddcl_submit"]
+default = []
 memory = ["serde_json", "process-memory", "sysinfo", "winapi", "scan_fmt"]
 ddinfo = ["serde_json", "hyper", "hyper-tls", "native-tls", "futures"]
 ddcl_submit = ["aes", "block-modes", "pbkdf2", "ring", "base32", "base64"]

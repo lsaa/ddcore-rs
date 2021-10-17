@@ -10,6 +10,7 @@ use num_traits::FromPrimitive;
 #[repr(C)]
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct StatsDataBlock {
+    marker: [u8; 11],
     pub ddstats_version: i32,
     pub player_id: i32,
     pub username: [u8; 32],

@@ -1,6 +1,6 @@
 [package]
 name = "ddcore-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Core features for interacting with the game Devil Daggers"
@@ -11,7 +11,7 @@ documentation = "https://docs.rs/ddcore-rs"
 [features]
 default = []
 memory = ["serde_json", "process-memory", "sysinfo", "winapi", "scan_fmt"]
-ddinfo = ["serde_json", "hyper", "hyper-tls", "native-tls", "futures"]
+ddinfo = ["serde_json", "hyper", "hyper-tls", "native-tls", "futures", "base64"]
 ddcl_submit = ["aes", "block-modes", "pbkdf2", "ring", "base32", "base64"]
 
 [dependencies]

@@ -153,12 +153,7 @@ impl GameConnection {
     pub fn is_alive(&self) -> bool {
         match self.handle.copy_address(self.base_address, &mut [0u8]) {
             Ok(_) => true,
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    panic!("You don't have permission to read process memory");
-                }
-                false
-            }
+            Err(_e) => false
         }
     }
 
@@ -170,11 +165,7 @@ impl GameConnection {
     }
 
     pub fn read_stats_block(&mut self) -> Result<StatsDataBlock, std::io::Error> {
-        let r = read_stats_data_block(self.handle, &self.params, &mut self.pointers);
-        if let Ok(data) = r {
-            return Ok(data);
-        }
-        r
+        read_stats_data_block(self.handle, &self.params, &mut self.pointers)
     }
 
     pub fn read_mem(&self, addr: usize, buffer: &mut [u8]) -> Result<(), std::io::Error> {
@@ -314,7 +305,7 @@ pub fn base_addr(pid: Pid, params: &ConnectionParams) -> Result<usize, std::io::
     }
 }
 
-pub fn is_elf(start_bytes: &[u8; 4]) -> bool {
+fn is_elf(start_bytes: &[u8; 4]) -> bool {
     let elf_signature: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
     elf_signature == *start_bytes
 }
@@ -352,7 +343,7 @@ pub fn get_base_address(pid: Pid, proc_name: String) -> Result<usize, std::io::E
     ))
 }
 
-#[cfg(windows)]
+#[cfg(target_os = "windows")]
 pub fn get_base_address(pid: Pid, _proc_name: String) -> Result<usize, std::io::Error> {
     // This is miserable
     use std::{mem::size_of_val, os::raw::c_ulong};
@@ -453,14 +444,18 @@ pub fn read_stats_data_block(handle: ProcessHandle, params: &ConnectionParams, p
     BLOCK_BUF.with(|buf| {
         let pointer;
         if let Some(ddstats_ptr) = pointers.ddstats_block {
-            pointer = ddstats_ptr + 0xC; // Skip header
+            pointer = ddstats_ptr;
         } else {
             pointers.ddstats_block = Some(calc_pointer_ddstats_block(handle, params, base)?);
-            pointer = pointers.ddstats_block.as_ref().unwrap().clone() + 0xC;
+            pointer = pointers.ddstats_block.as_ref().unwrap().clone();
         }
         let mut buf = buf.borrow_mut();
         handle.copy_address(pointer, buf.as_mut())?;
+        if !buf.starts_with(b"__ddstats__") {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "No ddstats block found at address"));
+        }
         let (_head, body, _tail) = unsafe { buf.as_mut().align_to::<StatsDataBlock>() };
         Ok(body[0].clone())
     })
 }
+

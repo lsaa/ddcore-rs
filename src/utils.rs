@@ -3,6 +3,7 @@
 //
 
 use std::{num::ParseIntError, string::FromUtf8Error};
+use std::fmt::Write;
 
 pub fn byte_array_to_string(bytes: &[u8]) -> Result<String, FromUtf8Error> {
     for (i, b) in bytes.iter().enumerate() {
@@ -18,6 +19,14 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
         .step_by(2)
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
         .collect()
+}
+
+pub fn md5_to_string(digest: &[u8]) -> String {
+    let mut s = String::with_capacity(2* digest.len());
+    for byte in digest {
+        write!(s, "{:02X}", byte).expect("Couldn't decode hash byte");
+    }
+    return s;
 }
 
 ////////////////////////////////// C# Version String

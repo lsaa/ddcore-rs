@@ -6,7 +6,7 @@ use crate::models::StatsBlockWithFrames;
 use hyper::{Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 use futures::StreamExt;
-use crate::ddinfo::{md5_byte_string, time_as_int, get_os};
+use crate::ddinfo::{time_as_int, get_os};
 use super::models::OperatingSystem;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -167,7 +167,7 @@ impl SubmitRunRequest {
             last.homing.to_string(),
             last.daggers_eaten.to_string(),
             if run.block.is_replay { "1".to_owned() } else { "0".to_owned() },
-            md5_byte_string(&run.block.survival_md5),
+            crate::utils::md5_to_string(&run.block.survival_md5[..]),
             vec![
                 time_as_int(run.block.time_lvl2).to_string(),
                 time_as_int(run.block.time_lvl3).to_string(),

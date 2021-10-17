@@ -8,6 +8,9 @@ repository = "https://github.com/lsaa/ddcore-rs"
 homepage = "https://github.com/lsaa/ddcore-rs"
 documentation = "https://docs.rs/ddcore-rs"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = []
 memory = ["serde_json", "process-memory", "sysinfo", "winapi", "scan_fmt"]

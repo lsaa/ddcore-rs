@@ -7,7 +7,6 @@ use std::{mem::size_of, process::Child};
 use process_memory::{CopyAddress, ProcessHandle, ProcessHandleExt, TryIntoProcessHandle};
 use sysinfo::{Pid, ProcessExt, System, SystemExt};
 use crate::models::{StatsBlockWithFrames, StatsDataBlock, StatsFrame};
-use scan_fmt::scan_fmt;
 
 ///////////////////////////////
 ///////////////////////////////
@@ -106,6 +105,39 @@ unsafe impl Send for GameConnection {}
 unsafe impl Sync for GameConnection {}
 
 impl GameConnection {
+    #[cfg(target_os = "windows")]
+    pub fn try_create(params: ConnectionParams) -> Result<Self, String> {
+        let os_info = OsInfo::get_from_os(&params.operating_system);
+        let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
+        let mut proc = get_proc(&proc_name);
+        if proc.is_none() { return Err("Process not found".into()); }
+        let mut pid = proc.as_ref().unwrap().1;
+        let mut handle = process_memory::Pid::from(pid as u32).try_into_process_handle().unwrap();
+        let mut c = None;
+        if let Err(e) = handle.copy_address(0, &mut [0u8]) {
+            if e.kind() == std::io::ErrorKind::PermissionDenied && os_info.can_create_child && params.create_child {
+                c = create_as_child(pid);
+                proc = get_proc(&proc_name);
+                pid = proc.as_ref().unwrap().1;
+                handle = process_memory::Pid::from(pid as u32).try_into_process_handle().unwrap();
+            }
+        }
+        let base_address = base_addr(handle, &params);
+        if base_address.is_err() { return Err("Coudln't get base address".into()); }
+        let base_address = base_address.unwrap();
+        Ok(Self {
+            pid,
+            handle,
+            base_address,
+            path: proc.as_ref().unwrap().0.clone(),
+            child_handle: c,
+            last_fetch: None,
+            params,
+            pointers: Pointers::default()
+        })
+    }
+
+    #[cfg(target_os = "linux")]
     pub fn try_create(params: ConnectionParams) -> Result<Self, String> {
         let os_info = OsInfo::get_from_os(&params.operating_system);
         let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
@@ -119,10 +151,10 @@ impl GameConnection {
                 c = create_as_child(pid);
                 proc = get_proc(&proc_name);
                 pid = proc.as_ref().unwrap().1;
-                handle = pid.try_into_process_handle().unwrap();
+                handle = process_memory::Pid::from(pid).try_into_process_handle().unwrap();
             }
         }
-        let base_address = base_addr(pid, &params);
+        let base_address = base_addr(handle, &params);
         if base_address.is_err() { return Err("Coudln't get base address".into()); }
         let base_address = base_address.unwrap();
         Ok(Self {
@@ -265,9 +297,21 @@ pub fn get_proc(process_name: &str) -> Option<(String, Pid)> {
     None
 }
 
-pub fn base_addr(pid: Pid, params: &ConnectionParams) -> Result<usize, std::io::Error> {
+#[cfg(target_os = "windows")]
+pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usize, std::io::Error> {
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
+    let pid = unsafe { winapi::um::processthreadsapi::GetProcessId(handle.0) as usize };
+    get_base_address(pid, proc_name)
+}
+
+#[cfg(target_os = "linux")]
+pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usize, std::io::Error> {
+    use scan_fmt::scan_fmt;
+    let os_info = OsInfo::get_from_os(&params.operating_system);
+    let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
+    let pid = handle.0;
+
     match &params.operating_system {
         &OperatingSystem::Linux => get_base_address(pid, proc_name),
         &OperatingSystem::Windows => get_base_address(pid, proc_name),
@@ -278,7 +322,6 @@ pub fn base_addr(pid: Pid, params: &ConnectionParams) -> Result<usize, std::io::
             };
 
             let f = BufReader::new(File::open(format!("/proc/{}/maps", pid))?);
-            let handle = pid.try_into_process_handle().expect("Couldn't create handle from PID");
             let mut magic_buf = [0u8; 4];
 
             for line in f.lines() {
@@ -305,13 +348,14 @@ pub fn base_addr(pid: Pid, params: &ConnectionParams) -> Result<usize, std::io::
     }
 }
 
-fn is_elf(start_bytes: &[u8; 4]) -> bool {
+pub fn is_elf(start_bytes: &[u8; 4]) -> bool {
     let elf_signature: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
     elf_signature == *start_bytes
 }
 
 #[cfg(target_os = "linux")]
 pub fn get_base_address(pid: Pid, proc_name: String) -> Result<usize, std::io::Error> {
+    use scan_fmt::scan_fmt;
     use std::{
         fs::File,
         io::{BufRead, BufReader},
@@ -366,7 +410,7 @@ pub fn get_base_address(pid: Pid, _proc_name: String) -> Result<usize, std::io::
 }
 
 #[cfg(target_os = "windows")]
-fn create_as_child(pid: Pid) -> Option<Child> {
+fn create_as_child(_pid: Pid) -> Option<Child> {
     return None;
 }
 
@@ -439,7 +483,7 @@ fn calc_pointer_ddstats_block(handle: ProcessHandle, params: &ConnectionParams, 
 
 pub fn read_stats_data_block(handle: ProcessHandle, params: &ConnectionParams, pointers: &mut Pointers) -> Result<StatsDataBlock, std::io::Error> {
     use process_memory::*;
-    let base = if pointers.base_address.is_none() { base_addr(handle.0, params)? } else { pointers.base_address.as_ref().unwrap().clone() };
+    let base = if pointers.base_address.is_none() { base_addr(handle, params)? } else { pointers.base_address.as_ref().unwrap().clone() };
     pointers.base_address = Some(base);
     BLOCK_BUF.with(|buf| {
         let pointer;

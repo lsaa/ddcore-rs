@@ -48,9 +48,7 @@ impl PartialOrd for Version {
         let (major,minor,build,rev) = (self_split.next()?, self_split.next()?, self_split.next()?, self_split.next()?);
         let (omajor,ominor,obuild,orev) = (other_split.next()?, other_split.next()?, other_split.next()?, other_split.next()?);
 
-        let mut is_greater = false;
-
-        is_greater = rev > orev;
+        let mut is_greater = rev > orev;
 
         if build > obuild {
             is_greater = true;

@@ -2,6 +2,8 @@
 // Models
 //
 
+pub mod replay;
+
 use crate::utils;
 use std::fmt::Write;
 use num_derive::FromPrimitive;

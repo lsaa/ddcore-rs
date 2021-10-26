@@ -71,18 +71,18 @@ impl OsInfo {
         match os {
             OperatingSystem::Linux => Self {
                 can_create_child: true,
-                default_block_marker: 5422992,
+                default_block_marker: 0x0053A850,
                 default_process_name: String::from("devildaggers")
             },
             OperatingSystem::Windows => Self {
                 can_create_child: false,
-                default_block_marker: 2264200,
+                default_block_marker: 0x0024FDC0,
                 default_process_name: String::from("dd")
             },
             OperatingSystem::LinuxProton => Self {
                 can_create_child: false,
-                default_block_marker: 2264200,
-                default_process_name: String::from("wine64-preloader")
+                default_block_marker: 0x0024FDC0,
+                default_process_name: String::from("wine-preloader")
             }
         }
     }

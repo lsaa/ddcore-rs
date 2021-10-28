@@ -237,6 +237,23 @@ impl GameConnection {
         })
     }
 
+    pub fn replay_bin(&self) -> Result<Vec<u8>, std::io::Error> {
+        if let Some(last_data) = &self.last_fetch {
+            let (ptr, len) = (
+                last_data.block.get_replay_pointer(),
+                last_data.block.replay_buffer_length as usize,
+            );
+            let mut res = Vec::with_capacity(len);
+            self.handle.copy_address(ptr, &mut res)?;
+            Ok(res)
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Stats not available",
+            ))
+        }
+    }
+
     pub fn stat_frames(&self) -> Result<Vec<StatsFrame>, std::io::Error> {
         use process_memory::*;
         if let Some(last_data) = &self.last_fetch {

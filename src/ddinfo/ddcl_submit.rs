@@ -46,6 +46,8 @@ pub struct SubmitRunRequest {
     pub is_replay: bool,
     pub prohibited_mods: bool,
     pub game_states: Vec<GameState>,
+    pub status: i32,
+    pub replay_data: String,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -96,7 +98,13 @@ pub struct GameState {
 }
 
 impl SubmitRunRequest {
-    pub fn from_compiled_run<T: ToString, K: ToString>(run: &StatsBlockWithFrames, secrets: Option<DdclSecrets>, client: T, version: K) -> anyhow::Result<Self> {
+    pub fn from_compiled_run<T: ToString, K: ToString>(
+        run: &StatsBlockWithFrames, 
+        secrets: Option<DdclSecrets>, 
+        client: T, 
+        version: K,
+        replay_bin: Vec<u8>
+    ) -> anyhow::Result<Self> {
         use anyhow::bail;
 
         if secrets.is_none() {
@@ -176,6 +184,9 @@ impl SubmitRunRequest {
         ].join(";");
 
         let validation = crypto_encoder::encrypt_and_encode(to_encrypt, sec.pass, sec.salt, sec.iv)?;
+        
+        let replay_bin = base64::encode(replay_bin);
+
         Ok(Self {
             survival_hash_md5: base64::encode(&run.block.survival_md5),
             player_id: run.block.player_id,
@@ -202,13 +213,21 @@ impl SubmitRunRequest {
             validation: validation.replace("=", ""),
             is_replay: run.block.is_replay,
             prohibited_mods: run.block.prohibited_mods,
-            game_states: states
+            game_states: states,
+            status: run.block.status,
+            replay_data: replay_bin,
         })
     }
 }
 
-pub async fn submit<T: ToString, K: ToString>(data: &StatsBlockWithFrames, secrets: Option<DdclSecrets>, client: T, version: K) -> Result<()> {
-    let req = SubmitRunRequest::from_compiled_run(data, secrets, client, version);
+pub async fn submit<T: ToString, K: ToString>(
+    data: &StatsBlockWithFrames,
+    secrets: Option<DdclSecrets>, 
+    client: T, 
+    version: K, 
+    replay_bin: Vec<u8>
+) -> Result<()> {
+    let req = SubmitRunRequest::from_compiled_run(data, secrets, client, version, replay_bin);
     if req.is_ok() {
         let https = HttpsConnector::new();
         let client = Client::builder().build(https);

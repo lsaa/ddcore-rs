@@ -57,6 +57,9 @@ pub struct StatsDataBlock {
     pub starting_homing: i32,
     pub starting_time: f32,
     pub prohibited_mods: bool,
+    padding3: [u8; 3],
+    pub replay_base: [u8; 8],
+    pub replay_buffer_length: i32,
 }
 
 #[repr(C)]
@@ -102,6 +105,10 @@ impl StatsDataBlock {
 
     pub fn get_stats_pointer(&self) -> usize {
         i64::from_le_bytes(self.stats_base) as usize
+    }
+
+    pub fn get_replay_pointer(&self) -> usize {
+        i64::from_le_bytes(self.replay_base) as usize
     }
 
     pub fn status(&self) -> GameStatus {

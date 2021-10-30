@@ -86,6 +86,30 @@ pub enum GameMode {
     TimeAttack,
 }
 
+#[derive(serde::Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SpawnsetForDdcl {
+    pub spawnset_id: i32,
+    pub name: String,
+    pub author_name: String,
+    pub custom_leaderboard: Option<SpawnsetCustomLeaderboard>
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SpawnsetCustomLeaderboard {
+    pub custom_leaderboard_id: i32,
+    pub custom_entries: Vec<SpawnsetCustomEntry>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SpawnsetCustomEntry {
+    pub custom_entry_id: i32,
+    pub time: i32,
+    pub has_replay: bool,
+}
+
 ////////////////////////////////// Leaderboards
 //////////////////////////////////
 

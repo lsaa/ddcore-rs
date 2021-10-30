@@ -60,6 +60,7 @@ pub struct StatsDataBlock {
     padding3: [u8; 3],
     pub replay_base: [u8; 8],
     pub replay_buffer_length: i32,
+    pub replay_flag: bool
 }
 
 #[repr(C)]
@@ -168,4 +169,5 @@ pub enum GameStatus {
     OwnReplayFromLastRun,
     OwnReplayFromLeaderboard,
     OtherReplay,
+    LocalReplay,
 }

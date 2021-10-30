@@ -4,6 +4,7 @@
 
 use std::cell::RefCell;
 use std::{mem::size_of, process::Child};
+use anyhow::bail;
 use process_memory::{CopyAddress, ProcessHandle, ProcessHandleExt, TryIntoProcessHandle};
 use sysinfo::{Pid, ProcessExt, System, SystemExt};
 use crate::models::{StatsBlockWithFrames, StatsDataBlock, StatsFrame};
@@ -76,12 +77,12 @@ impl OsInfo {
             },
             OperatingSystem::Windows => Self {
                 can_create_child: false,
-                default_block_marker: 0x0024FDC0,
+                default_block_marker: 0x250DC0,
                 default_process_name: String::from("dd")
             },
             OperatingSystem::LinuxProton => Self {
                 can_create_child: false,
-                default_block_marker: 0x0024FDC0,
+                default_block_marker: 0x250DC0,
                 default_process_name: String::from("wine-preloader")
             }
         }
@@ -237,13 +238,13 @@ impl GameConnection {
         })
     }
 
-    pub fn replay_bin(&self) -> Result<Vec<u8>, std::io::Error> {
-        if let Some(last_data) = &self.last_fetch {
+    pub fn replay_bin(&mut self) -> Result<Vec<u8>, std::io::Error> {
+        if let Some(block) = &self.last_fetch {
             let (ptr, len) = (
-                last_data.block.get_replay_pointer(),
-                last_data.block.replay_buffer_length as usize,
+                block.block.get_replay_pointer(),
+                block.block.replay_buffer_length as usize,
             );
-            let mut res = Vec::with_capacity(len);
+            let mut res = vec![0u8; len];
             self.handle.copy_address(ptr, &mut res)?;
             Ok(res)
         } else {
@@ -299,6 +300,25 @@ impl GameConnection {
                 std::io::ErrorKind::NotFound,
                 "Stats not available",
             ))
+        }
+    }
+
+    pub fn play_replay(&self, replay: Vec<u8>) -> anyhow::Result<()> {
+        use process_memory::*;
+        if let Some(last_data) = &self.last_fetch {
+            let ddstats_addr = self.pointers.ddstats_block.expect("last data can't exist without this also being set");
+            let replay_buffer_addr = last_data.block.get_replay_pointer();
+            let flag_addr = ddstats_addr + 316;
+            let len_addr = ddstats_addr + 312;
+            let len = replay.len() as i32;
+
+            self.handle.put_address(replay_buffer_addr, &replay)?;
+            self.handle.put_address(len_addr, &len.to_le_bytes())?;
+            self.handle.put_address(flag_addr, &[1])?;
+            
+            Ok(())
+        } else {
+            bail!("No data found");
         }
     }
 }

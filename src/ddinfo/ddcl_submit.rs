@@ -3,13 +3,12 @@
 //
         
 use crate::models::StatsBlockWithFrames;
+use anyhow::bail;
 use hyper::{Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 use futures::StreamExt;
 use crate::ddinfo::{time_as_int, get_os};
 use super::models::OperatingSystem;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct DdclSecrets {
     pub iv: String,
@@ -48,6 +47,7 @@ pub struct SubmitRunRequest {
     pub game_states: Vec<GameState>,
     pub status: i32,
     pub replay_data: String,
+    pub replay_player_id: i32,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -105,8 +105,6 @@ impl SubmitRunRequest {
         version: K,
         replay_bin: Vec<u8>
     ) -> anyhow::Result<Self> {
-        use anyhow::bail;
-
         if secrets.is_none() {
             bail!("Missing DDCL Secrets");
         }
@@ -216,6 +214,7 @@ impl SubmitRunRequest {
             game_states: states,
             status: run.block.status,
             replay_data: replay_bin,
+            replay_player_id: run.block.replay_player_id,
         })
     }
 }
@@ -226,7 +225,11 @@ pub async fn submit<T: ToString, K: ToString>(
     client: T, 
     version: K, 
     replay_bin: Vec<u8>
-) -> Result<()> {
+) -> anyhow::Result<()> {
+    if replay_bin.is_empty() {
+        bail!("No bytes in replay!");
+    }
+
     let req = SubmitRunRequest::from_compiled_run(data, secrets, client, version, replay_bin);
     if req.is_ok() {
         let https = HttpsConnector::new();
@@ -244,6 +247,9 @@ pub async fn submit<T: ToString, K: ToString>(
         let mut body = Vec::new();
         while let Some(chunk) = res.body_mut().next().await {
             body.extend_from_slice(&chunk?);
+        }
+        if res.status() != 200 {
+            unsafe { bail!(String::from_utf8_unchecked(body)); }
         }
     }
     Ok(())

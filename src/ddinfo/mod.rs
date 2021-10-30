@@ -11,7 +11,7 @@ use anyhow::{Result, bail};
 use hyper::{Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 use futures::StreamExt;
-use crate::ddinfo::models::{DdstatsRustIntegration, Entry, Leaderboard, SpawnsetFile};
+use crate::ddinfo::models::{DdstatsRustIntegration, Entry, Leaderboard, SpawnsetFile, SpawnsetForDdcl};
 
 use self::models::{OperatingSystem, MarkerResponse, Tool};
 
@@ -228,7 +228,7 @@ pub async fn get_all_spawnsets<T: ToString, K: ToString>(name_filter: T, author_
     Ok(res)
 }
 
-pub async fn get_spawnset_by_hash<T: ToString>(hash: T) -> Result<SpawnsetFile> {
+pub async fn get_spawnset_by_hash<T: ToString>(hash: T) -> Result<SpawnsetForDdcl> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
     let vv = crate::utils::decode_hex(&hash.to_string())?;
@@ -249,7 +249,30 @@ pub async fn get_spawnset_by_hash<T: ToString>(hash: T) -> Result<SpawnsetFile> 
     if res.status() != 200 {
         unsafe { bail!(String::from_utf8_unchecked(body)); }
     }
-    let res: SpawnsetFile = serde_json::from_slice(&body)?;
+    let res: SpawnsetForDdcl = serde_json::from_slice(&body)?;
     Ok(res)
 }
 
+////////////////////////////////// Custom Leaderboards
+//////////////////////////////////
+
+pub async fn get_replay_by_id(entry_id: i32) -> Result<Vec<u8>> {
+    let https = HttpsConnector::new();
+    let client = Client::builder().build::<_, hyper::Body>(https);
+    let path = format!("api/custom-entries/{}/replay", entry_id);
+    let uri = format!("https://devildaggers.info/{}", path);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap();
+    let mut res = client.request(req).await?;
+    let mut body = Vec::new();
+    while let Some(chunk) = res.body_mut().next().await {
+        body.extend_from_slice(&chunk?);
+    }
+    if res.status() != 200 {
+        unsafe { bail!(String::from_utf8_unchecked(body)); }
+    }
+    Ok(body)
+}

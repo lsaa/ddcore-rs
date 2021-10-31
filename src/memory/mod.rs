@@ -217,7 +217,7 @@ impl GameConnection {
             if pid as u32 != self.pid as u32 {
                 true
             } else {
-                unsafe { winapi::um::winuser::ShowWindow(hwnd, 9); }
+                unsafe { winapi::um::winuser::ShowWindow(hwnd, 1); }
                 false
             }
         })

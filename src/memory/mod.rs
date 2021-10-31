@@ -2,8 +2,9 @@
 // memory
 //
 
+use std::mem::size_of;
 use std::cell::RefCell;
-use std::{mem::size_of, process::Child};
+use std::process::Child;
 use anyhow::bail;
 use process_memory::{CopyAddress, ProcessHandle, ProcessHandleExt, TryIntoProcessHandle};
 use sysinfo::{Pid, ProcessExt, System, SystemExt};
@@ -203,6 +204,28 @@ impl GameConnection {
 
     pub fn read_mem(&self, addr: usize, buffer: &mut [u8]) -> Result<(), std::io::Error> {
         self.handle.copy_address(addr, buffer)
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn maximize_dd(&self) {
+        use winapi::shared::windef::HWND;
+        use winapi::shared::minwindef::DWORD;
+
+        enumerate_windows(|hwnd: HWND| {
+            let mut pid: DWORD = DWORD::default();
+            unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid); }
+            if pid as u32 != self.pid as u32 {
+                true
+            } else {
+                unsafe { winapi::um::winuser::ShowWindow(hwnd, 9); }
+                false
+            }
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn maximize_dd(&self) {
+        // pep
     }
 
     pub fn read_stats_block_with_frames(&mut self) -> Result<StatsBlockWithFrames, std::io::Error> {
@@ -425,9 +448,37 @@ pub fn get_base_address(pid: Pid, proc_name: String) -> Result<usize, std::io::E
 }
 
 #[cfg(target_os = "windows")]
+pub fn enumerate_windows<F>(mut callback: F)
+    where F: FnMut(winapi::shared::windef::HWND) -> bool
+{
+    use winapi::shared::windef::HWND;
+    use winapi::shared::minwindef::LPARAM;
+    use winapi::um::winuser::EnumWindows;
+    use std::mem;
+    use winapi::ctypes::c_void;
+    let mut trait_obj: &mut dyn FnMut(HWND) -> bool = &mut callback;
+    let closure_pointer_pointer: *mut c_void = unsafe { mem::transmute(&mut trait_obj) };
+
+    let lparam = closure_pointer_pointer as LPARAM;
+    unsafe { EnumWindows(Some(enumerate_callback), lparam) };
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn enumerate_callback(hwnd: winapi::shared::windef::HWND, lparam: winapi::shared::minwindef::LPARAM) -> winapi::shared::minwindef::BOOL {
+    use std::mem;
+    use winapi::shared::windef::HWND;
+    use winapi::shared::minwindef::{TRUE, FALSE};
+    use winapi::ctypes::c_void;
+    let closure: &mut &mut dyn FnMut(HWND) -> bool = mem::transmute(lparam as *mut c_void);
+    if closure(hwnd) { TRUE } else { FALSE }
+}
+
+#[cfg(target_os = "windows")]
 pub fn get_base_address(pid: Pid, _proc_name: String) -> Result<usize, std::io::Error> {
     // This is miserable
-    use std::{mem::size_of_val, os::raw::c_ulong};
+    use winapi::um::handleapi::CloseHandle;
+    use std::os::raw::c_ulong;
+    use winapi::um::tlhelp32::MODULEENTRY32;
 
     let snapshot = unsafe {
         winapi::um::tlhelp32::CreateToolhelp32Snapshot(
@@ -436,14 +487,13 @@ pub fn get_base_address(pid: Pid, _proc_name: String) -> Result<usize, std::io::
         )
     };
 
-    let mut me = winapi::um::tlhelp32::MODULEENTRY32::default();
-    me.dwSize = size_of_val(&me) as c_ulong as winapi::shared::minwindef::DWORD;
+    let mut module = std::mem::MaybeUninit::<MODULEENTRY32>::uninit();
     unsafe {
-        winapi::um::tlhelp32::Module32First(snapshot, &mut me);
+        winapi::um::tlhelp32::Module32First(snapshot, module.as_mut_ptr());
+        CloseHandle(snapshot);
+        let module = module.assume_init();
+        return Ok(module.modBaseAddr as usize);
     }
-
-    //let res = me.modBaseAddr.clone() as usize;
-    Ok(me.modBaseAddr as usize)
 }
 
 #[cfg(target_os = "windows")]

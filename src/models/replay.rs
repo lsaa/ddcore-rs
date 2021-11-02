@@ -18,10 +18,24 @@ pub struct DfRpl2 {
     pub entities: Vec<Entity>,
     pub frames: Vec<ReplayFrame>,
 }
- #[derive(Debug, Clone)]
+
+#[derive(Debug, Clone)]
 pub struct DfRpl2Header {
     pub player_name: String,
     pub funny_bytes: Vec<u8>
+}
+
+#[derive(Debug, Clone)]
+pub struct DdRpl {
+    pub entities: Vec<Entity>,
+    pub frames: Vec<ReplayFrame>,
+    pub spawnset_bin: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DdRplHeader {
+    pub player_name: String,
+    pub player_id: i32,
 }
 
 #[derive(Debug, Clone)]

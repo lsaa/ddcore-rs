@@ -232,7 +232,10 @@ pub async fn get_spawnset_by_hash<T: ToString>(hash: T) -> Result<SpawnsetForDdc
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
     let vv = crate::utils::decode_hex(&hash.to_string())?;
-    let b = base64::encode(vv).replace("=", "%3D");
+    let b = base64::encode(vv)
+        .replace("=", "%3D")
+        .replace("/", "%2F")
+        .replace("+", "%2B");
     let path = format!("api/spawnsets/by-hash?hash={}", b);
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()

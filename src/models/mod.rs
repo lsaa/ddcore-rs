@@ -3,6 +3,7 @@
 //
 
 pub mod replay;
+pub mod spawnset;
 
 use crate::utils;
 use std::fmt::Write;

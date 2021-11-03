@@ -2,6 +2,7 @@
 // utils
 //
 
+use std::mem::size_of;
 use std::{num::ParseIntError, string::FromUtf8Error};
 use std::fmt::Write;
 
@@ -27,6 +28,26 @@ pub fn md5_to_string(digest: &[u8]) -> String {
         write!(s, "{:02X}", byte).expect("Couldn't decode hash byte");
     }
     return s;
+}
+
+pub fn as_bytes<T: Sized>(p: &T) -> &[u8] {
+    unsafe {
+        ::std::slice::from_raw_parts(
+            (p as *const T) as *const u8,
+            ::std::mem::size_of::<T>(),
+        )
+    }
+}
+
+pub fn align_bytes<T>(slice: &[u8]) -> &[T] {
+    unsafe {
+        let (_head, body, _tail) = slice.align_to::<T>();
+        body
+    }
+}
+
+pub unsafe fn writer_buf<'a, T: Sized>(source: &mut T) -> &'a mut [u8] {
+    std::slice::from_raw_parts_mut(source as *mut _ as *mut u8, size_of::<T>())
 }
 
 ////////////////////////////////// C# Version String

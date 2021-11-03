@@ -30,20 +30,16 @@ pub fn md5_to_string(digest: &[u8]) -> String {
     return s;
 }
 
-pub fn as_bytes<T: Sized>(p: &T) -> &[u8] {
-    unsafe {
-        ::std::slice::from_raw_parts(
-            (p as *const T) as *const u8,
-            ::std::mem::size_of::<T>(),
-        )
-    }
+pub unsafe fn as_bytes<T: Sized>(p: &T) -> &[u8] {
+    ::std::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::std::mem::size_of::<T>(),
+    )
 }
 
-pub fn align_bytes<T>(slice: &[u8]) -> &[T] {
-    unsafe {
-        let (_head, body, _tail) = slice.align_to::<T>();
-        body
-    }
+pub unsafe fn align_bytes<T>(slice: &[u8]) -> &[T] {
+    let (_head, body, _tail) = slice.align_to::<T>();
+    body
 }
 
 pub unsafe fn writer_buf<'a, T: Sized>(source: &mut T) -> &'a mut [u8] {

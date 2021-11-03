@@ -2,7 +2,7 @@
 // spawnsets
 //
 
-use std::{io::{Read, Sink, Write}, mem::size_of};
+use std::{io::{Read, Write}, mem::size_of};
 use anyhow::Result;
 use crate::utils::{align_bytes, as_bytes, writer_buf};
 
@@ -156,7 +156,7 @@ impl<SpawnType: Clone> Spawnset<SpawnType> {
         })
     }
 
-    pub fn serialize<W: std::io::Write>(&self, sink: &mut W) -> Result<()> {
+    pub fn serialize<W: Write>(&self, sink: &mut W) -> Result<()> {
         sink.write(as_bytes(&self.header))?;
         sink.write(as_bytes(&self.arena))?;
         sink.write(as_bytes(&self.spawns_header))?;

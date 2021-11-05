@@ -16,7 +16,7 @@ pub struct Spawnset<SpawnType> {
 }
 
 #[repr(i32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum V3Enemies {
     Squid1 = 0,
     Squid2 = 1,
@@ -32,7 +32,7 @@ pub enum V3Enemies {
 }
 
 #[repr(i32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum V2Enemies {
     Squid1 = 0,
     Squid2 = 1,
@@ -47,7 +47,7 @@ pub enum V2Enemies {
 }
 
 #[repr(i32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum V1Enemies {
     Squid1 = 0,
     Squid2 = 1,

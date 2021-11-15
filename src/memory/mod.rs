@@ -79,7 +79,7 @@ impl OsInfo {
             OperatingSystem::Windows => Self {
                 can_create_child: false,
                 default_block_marker: 0x250DC0,
-                default_process_name: String::from("dd")
+                default_process_name: String::from("dd.exe")
             },
             OperatingSystem::LinuxProton => Self {
                 can_create_child: false,
@@ -588,5 +588,19 @@ pub fn read_stats_data_block(handle: ProcessHandle, params: &ConnectionParams, p
         let (_head, body, _tail) = unsafe { buf.as_mut().align_to::<StatsDataBlock>() };
         Ok(body[0].clone())
     })
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_dd() -> anyhow::Result<()> {
+    use std::process::Command;
+    Command::new("cmd").arg("/c start steam://run/422970").output()?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn start_dd() -> anyhow::Result<()> {
+    use std::process::Command;
+    Command::new("steam").arg("steam://run/422970").output()?;
+    Ok(())
 }
 

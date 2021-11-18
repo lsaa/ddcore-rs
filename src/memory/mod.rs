@@ -30,6 +30,7 @@ pub struct OsInfo {
     pub can_create_child: bool,
 }
 
+#[derive(Debug)]
 pub enum OperatingSystem {
     Linux,
     LinuxProton,
@@ -157,7 +158,7 @@ impl GameConnection {
             }
         }
         let base_address = base_addr(handle, &params);
-        if base_address.is_err() { return Err("Coudln't get base address".into()); }
+        if base_address.is_err() { return Err(format!("Couldn't find base addr {:?}", base_address.err())); }
         let base_address = base_address.unwrap();
         Ok(Self {
             pid,
@@ -367,11 +368,13 @@ pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usi
 
 #[cfg(target_os = "linux")]
 pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usize, std::io::Error> {
+    use std::io::Read;
+
     use scan_fmt::scan_fmt;
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
     let pid = handle.0;
-
+    
     match &params.operating_system {
         &OperatingSystem::Linux => get_base_address(pid, proc_name),
         &OperatingSystem::Windows => get_base_address(pid, proc_name),
@@ -381,19 +384,31 @@ pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usi
                 io::{BufRead, BufReader},
             };
 
+            let mut stat = String::new();
+            BufReader::new(File::open(format!("/proc/{}/stat", pid))?).read_to_string(&mut stat)?;
+
+            if !stat.contains("dd.exe") {
+                return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Not the correct process"));
+            }
+
             let f = BufReader::new(File::open(format!("/proc/{}/maps", pid))?);
-            let mut magic_buf = [0u8; 4];
+            let mut magic_buf = [0u8; 2];
+
+            #[cfg(feature = "logger")]
+            log::info!("Found LinuxProton dd.exe {:?}", pid);
 
             for line in f.lines() {
                 if let Ok(line) = line {
-                    if let Ok((start, _end, perms, mod_path)) = scan_fmt!(&line, "{x}-{x} {} {*} {*} {*} {[^\t\n]}\n", [hex usize], [hex usize], String, String)
+                    if let Ok((start, _end, _perms, mod_path)) = scan_fmt!(&line, "{x}-{x} {} {*} {*} {*} {[^\t\n]}\n", [hex usize], [hex usize], String, String)
                     {
                         let r = handle.copy_address(start, &mut magic_buf);
                         if r.is_err() {
+                            #[cfg(feature = "logger")]
+                            log::info!("Failed to read memory {:?} {} {:X}", r.err(), pid, start);
                             continue;
                         }
 
-                        if mod_path.contains("steamclient.so") && perms.contains("x") {
+                        if mod_path.contains("dd.exe") && is_windows_exe(&magic_buf) {
                             return Ok(start);
                         }
                     }
@@ -410,6 +425,11 @@ pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usi
 
 pub fn is_elf(start_bytes: &[u8; 4]) -> bool {
     let elf_signature: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+    elf_signature == *start_bytes
+}
+
+pub fn is_windows_exe(start_bytes: &[u8; 2]) -> bool {
+    let elf_signature: [u8; 2] = [0x4D, 0x5A];
     elf_signature == *start_bytes
 }
 

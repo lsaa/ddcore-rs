@@ -330,11 +330,17 @@ impl GameConnection {
     pub fn play_replay(&self, replay: Vec<u8>) -> anyhow::Result<()> {
         use process_memory::*;
         if let Some(last_data) = &self.last_fetch {
+            #[cfg(feature = "logger")]
+            log::info!("Attempting to load replay");
+
             let ddstats_addr = self.pointers.ddstats_block.expect("last data can't exist without this also being set");
             let replay_buffer_addr = last_data.block.get_replay_pointer();
             let flag_addr = ddstats_addr + 316;
             let len_addr = ddstats_addr + 312;
             let len = replay.len() as i32;
+
+            #[cfg(feature = "logger")]
+            log::info!("{:X} {:X} {:X}", ddstats_addr, replay_buffer_addr, flag_addr);
 
             self.handle.put_address(replay_buffer_addr, &replay)?;
             self.handle.put_address(len_addr, &len.to_le_bytes())?;

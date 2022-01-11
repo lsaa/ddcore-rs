@@ -1,6 +1,6 @@
 [package]
 name = "ddcore-rs"
-version = "0.1.16"
+version = "0.1.17"
 edition = "2021"
 license = "MIT"
 description = "Core features for interacting with the game Devil Daggers"

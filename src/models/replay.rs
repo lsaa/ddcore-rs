@@ -7,6 +7,8 @@ use anyhow::{Result, bail};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+use super::spawnset::V3Enemies;
+
 type EntityId = i32;
 type PositionInt = [i16; 3];
 type PositionFloat = [f32; 3];
@@ -15,8 +17,13 @@ type LeviathanData = i32;
 #[derive(Debug, Clone)]
 pub struct DfRpl2 {
     pub header: DfRpl2Header,
-    pub entities: Vec<Entity>,
+    pub data: ReplayData
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplayData {
     pub frames: Vec<ReplayFrame>,
+    pub entities: Vec<Entity>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,15 +34,38 @@ pub struct DfRpl2Header {
 
 #[derive(Debug, Clone)]
 pub struct DdRpl {
-    pub entities: Vec<Entity>,
-    pub frames: Vec<ReplayFrame>,
-    pub spawnset_bin: Vec<u8>,
+    pub header: DdRplHeader,
+    pub data: ReplayData,
+    pub extra: Option<ExtraData>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtraData {
+    pub death_type: u8,
+    pub homing: Vec<i32>,
+    pub homing_used: Vec<i32>,
+    pub gems_collected: u32,
+    pub kills: i32,
+    pub time: f32,
+    pub starting_time: f32,
+    pub starting_gems: i32,
+    pub starting_hand: u8,
+    pub daggers_fired: i32,
+    pub daggers_hit: i32,
+    pub look_speed: f32,
+    pub spawnset_hash: String,
+    pub lvl2_time: f32,
+    pub lvl3_time: f32,
+    pub lvl4_time: f32,
 }
 
 #[derive(Debug, Clone)]
 pub struct DdRplHeader {
     pub player_name: String,
     pub player_id: i32,
+    pub spawnset_bin: Vec<u8>,
+    pub frame_count: u32,
+    pub spawnset: Option<crate::models::spawnset::Spawnset<V3Enemies>>
 }
 
 #[derive(Debug, Clone)]
@@ -169,13 +199,16 @@ pub struct SquidData {
     pub rotation: f32, // Radians
 }
 
-#[derive(Debug, Clone, FromPrimitive)]
+#[derive(Debug, Clone, FromPrimitive, PartialEq)]
 pub enum DaggerLevel {
-    Level1 = 1,
+    Level0 = 0,
+    Level1,
     Level2,
     Level3,
     Level4,
-    Level5
+    Level5,
+    Level6,
+    Level7,
 }
 
 #[derive(Debug, Clone)]
@@ -242,28 +275,13 @@ pub struct MouseData {
     pub look_speed: Option<f32>,
 }
 
-impl DfRpl2 {
+impl ReplayData {
     pub fn from_reader<R: Read>(source: &mut R) -> Result<Self> {
         use bytestream::*;
-
-        // Skip DF_RPL2
-        source.read(&mut [0u8; 7])?;
-        let username_len = u16::read_from(source, ByteOrder::LittleEndian)?;
-        let mut username = vec![0u8; username_len as usize];
-        source.read(&mut username)?;
-        let username = String::from_utf8(username)?;
-        let funny_bytes_len = u16::read_from(source, ByteOrder::LittleEndian)?;
-        let mut funny_bytes = vec![0u8; funny_bytes_len as usize];
-        source.read(&mut funny_bytes)?;
-
-        let header = DfRpl2Header {
-            player_name: username,
-            funny_bytes
-        };
-
         let mut decompressed = vec![];
         libflate::zlib::Decoder::new(source)?.read_to_end(&mut decompressed)?;
         let mut event_reader = &decompressed[..];
+
 
         let mut next_entity_id: EntityId = 1;
         let mut entities: Vec<Entity> = vec![];
@@ -294,7 +312,7 @@ impl DfRpl2 {
                             orientationb: read3_i16(&mut event_reader)?,
                             orientationc: read3_i16(&mut event_reader)?,
                             b: u8::read_from(&mut event_reader, ByteOrder::LittleEndian)?,
-                            dagger_level: FromPrimitive::from_u8(u8::read_from(&mut event_reader, ByteOrder::LittleEndian)?).unwrap()
+                            dagger_level: FromPrimitive::from_u8(u8::read_from(&mut event_reader, ByteOrder::LittleEndian)?).unwrap(),
                         }),
                         EntityType::Squid1 => EntityData::Squid1(SquidData {
                             a: read_entity_id(&mut event_reader)?,
@@ -476,10 +494,204 @@ impl DfRpl2 {
             }
         }
 
-        Ok(DfRpl2 {
-            header,
+        Ok(Self {
             frames,
             entities
+        })
+    }
+}
+
+impl DdRplHeader {
+    pub fn create_spawnset(&mut self) -> Result<()> {
+        let bin_reader = self.spawnset_bin.clone();
+        let spawnset = crate::models::spawnset::Spawnset::<V3Enemies>::deserialize(&mut &bin_reader[..])?;
+        self.spawnset = Some(spawnset);
+        Ok(())
+    }
+}
+
+impl DdRpl {
+
+    pub fn create_extra(&mut self) -> Result<()> {
+        if self.header.spawnset.is_none() {
+            self.header.create_spawnset()?;
+        }
+
+        let spawnset = self.header.spawnset.as_ref().unwrap().clone();
+        let mut old_extra = self.extra.as_ref().unwrap().clone();
+        let starting_time = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().timer_start.as_ref().unwrap().clone() } else { 0.0 };
+        let initial_hand = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().initial_hand.clone() } else { 0 };
+        let additional_gems = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().additional_gems.clone() } else { 0 };
+        let spawnset_hash = format!("{:?}", md5::compute(&self.header.spawnset_bin));
+
+        old_extra.starting_time = starting_time;
+        old_extra.starting_hand = initial_hand;
+        old_extra.starting_gems = additional_gems;
+        old_extra.spawnset_hash = spawnset_hash;
+        old_extra.time = old_extra.starting_time;
+
+        let mut _gem_counter = old_extra.starting_gems;
+        let mut hand_level = old_extra.starting_hand;
+        #[allow(unused_assignments)]
+        let mut level_gems = 0;
+        let mut homing = 0;
+        let mut homing_used = 0;
+        let mut frame_count = 0;
+
+        match &old_extra.starting_hand {
+            3 => { level_gems = 70; homing = old_extra.starting_gems },
+            4 => { level_gems = 71; homing = old_extra.starting_gems },
+            _ => { level_gems = old_extra.starting_gems },
+        };
+
+        let mut homing_history = vec![];
+        let mut homing_used_history = vec![];
+
+        for frame in &self.data.frames {
+            for event in &frame.events {
+                match event {
+                    ReplayEvent::EndFrame(_button_data, mouse_data) => {
+                        if mouse_data.look_speed.is_some() {
+                            old_extra.look_speed = mouse_data.look_speed.unwrap();
+                        }
+                    },
+                    ReplayEvent::GemPickup => {
+                        _gem_counter += 1;
+                        if hand_level <= 1 {
+                            level_gems += 1;
+                            if level_gems >= 10 {
+                                old_extra.lvl2_time = (frame_count + 1) as f32 / 60.;
+                                hand_level = 2;
+                                level_gems = 10;
+                            }
+                        } else if hand_level == 2 {
+                            level_gems += 1;
+                            if level_gems >= 70 {
+                                old_extra.lvl3_time = (frame_count + 1) as f32 / 60.;
+                                hand_level = 3;
+                                level_gems = 70;
+                            }
+                        } else if hand_level == 3 {
+                            homing += 1;
+                            if homing >= 150 {
+                                old_extra.lvl4_time = (frame_count + 1) as f32 / 60.;
+                                hand_level = 4;
+                                level_gems = 71;
+                                homing = 0;
+                            }
+                        } else {
+                            homing += 1;
+                        }
+                    },
+                    ReplayEvent::Spawn(data) => {
+                        match data {
+                            EntityData::Dagger(dagger) => {
+                                if dagger.dagger_level.eq(&DaggerLevel::Level6) {
+                                    homing -= 1;
+                                    homing_used += 1;
+                                }
+                            },
+                            _ => {},
+                        };
+                    },
+                    _ => {},
+                }
+            }
+            
+            frame_count += 1;
+            homing_history.push(homing.clone());
+            homing_used_history.push(homing_used.clone());
+        }
+
+        old_extra.homing = homing_history;
+        old_extra.homing_used = homing_used_history;
+        old_extra.time += (frame_count + 1) as f32 / 60.;
+
+        self.extra = Some(old_extra);
+
+        Ok(())
+    }
+
+    pub fn from_reader<R: Read>(source: &mut R) -> Result<Self> {
+        use bytestream::*;
+
+        source.read(&mut [0u8; 0x1A])?;
+        let daggers_fired = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let _unknown1 = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let gems_collected = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let daggers_hit = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let kills = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let player_id = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let username_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let mut username = vec![0u8; username_len as usize];
+        source.read(&mut username)?;
+        let username = String::from_utf8(username)?;
+        source.read(&mut [0u8; 26])?;
+        let spawnset_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let mut spawnset_bin = vec![0u8; spawnset_len as usize];
+        source.read(&mut spawnset_bin)?;
+        let frame_count = u32::read_from(source, ByteOrder::LittleEndian)?;
+
+        let header = DdRplHeader {
+            player_name: username,
+            player_id,
+            spawnset_bin,
+            frame_count,
+            spawnset: None,
+        };
+
+        let data = ReplayData::from_reader(source)?;
+
+        Ok(DdRpl {
+            header,
+            data,
+            extra: Some(ExtraData {
+                daggers_fired,
+                daggers_hit,
+                gems_collected: gems_collected as u32,
+                kills,
+                //EMPTY
+                death_type: 0,
+                look_speed: 0.,
+                homing: vec![],
+                homing_used: vec![],
+                time: (frame_count + 1) as f32 / 60.,
+                starting_time: 0.,
+                starting_gems: 0,
+                starting_hand: 0,
+                spawnset_hash: "".into(),
+                lvl2_time: 0.,
+                lvl3_time: 0.,
+                lvl4_time: 0.,
+            })
+        })
+    }
+}
+
+impl DfRpl2 {
+    pub fn from_reader<R: Read>(source: &mut R) -> Result<Self> {
+        use bytestream::*;
+
+        // Skip DF_RPL2
+        source.read(&mut [0u8; 7])?;
+        let username_len = u16::read_from(source, ByteOrder::LittleEndian)?;
+        let mut username = vec![0u8; username_len as usize];
+        source.read(&mut username)?;
+        let username = String::from_utf8(username)?;
+        let funny_bytes_len = u16::read_from(source, ByteOrder::LittleEndian)?;
+        let mut funny_bytes = vec![0u8; funny_bytes_len as usize];
+        source.read(&mut funny_bytes)?;
+
+        let header = DfRpl2Header {
+            player_name: username,
+            funny_bytes
+        };
+
+        let data = ReplayData::from_reader(source)?;
+
+        Ok(DfRpl2 {
+            header,
+            data
         })
     }
 }

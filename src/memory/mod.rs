@@ -2,6 +2,7 @@
 // memory
 //
 
+use std::collections::HashMap;
 use std::mem::size_of;
 use std::cell::RefCell;
 use std::process::Child;
@@ -28,6 +29,7 @@ pub struct OsInfo {
     pub default_block_marker: usize,
     pub default_process_name: String,
     pub can_create_child: bool,
+    pub offsets: HashMap<String, Vec<usize>>
 }
 
 #[derive(Debug)]
@@ -66,6 +68,14 @@ pub struct ConnectionParams {
     pub overrides: MemoryOverride,
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
 /////////////////////////////// Struct Impls
 ///////////////////////////////
 
@@ -74,18 +84,21 @@ impl OsInfo {
         match os {
             OperatingSystem::Linux => Self {
                 can_create_child: true,
-                default_block_marker: 0x0053A850,
-                default_process_name: String::from("devildaggers")
+                default_block_marker: 0x00521C98,
+                default_process_name: String::from("devildaggers"),
+                offsets: HashMap::new()
             },
             OperatingSystem::Windows => Self {
                 can_create_child: false,
                 default_block_marker: 0x250DC0,
-                default_process_name: String::from("dd.exe")
+                default_process_name: String::from("dd.exe"),
+                offsets: HashMap::new()
             },
             OperatingSystem::LinuxProton => Self {
                 can_create_child: false,
                 default_block_marker: 0x250DC0,
-                default_process_name: String::from("wine-preloader")
+                default_process_name: String::from("wine-preloader"),
+                offsets: HashMap::new()
             }
         }
     }
@@ -345,7 +358,7 @@ impl GameConnection {
             self.handle.put_address(replay_buffer_addr, &replay)?;
             self.handle.put_address(len_addr, &len.to_le_bytes())?;
             self.handle.put_address(flag_addr, &[1])?;
-            
+
             Ok(())
         } else {
             bail!("No data found");
@@ -583,7 +596,7 @@ fn calc_pointer_ddstats_block(handle: ProcessHandle, params: &ConnectionParams, 
     let block_start = params.overrides.block_marker.unwrap_or(os_info.default_block_marker);
     match &params.operating_system {
         &OperatingSystem::Linux => {
-            handle.get_offset(&[base_address + block_start, 0x0, 0x1F10])
+            handle.get_offset(&[base_address + block_start, 0])
         },
         &OperatingSystem::Windows => {
             handle.get_offset(&[base_address + block_start, 0])

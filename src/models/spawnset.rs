@@ -6,7 +6,7 @@ use std::{io::{Read, Write}, mem::size_of};
 use anyhow::Result;
 use crate::utils::{align_bytes, as_bytes, writer_buf};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Spawnset<SpawnType> {
     pub header: Header,
     pub arena: Arena,
@@ -71,7 +71,7 @@ pub struct Spawn<SpawnType> {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Header {
     pub spawn_version: i32,
     pub world_version: i32,
@@ -85,13 +85,13 @@ pub struct Header {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Arena {
     pub data: [f32; 51*51],
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SpawnsHeader {
     pub _u1: u32,
     pub _u2: u32,
@@ -105,7 +105,7 @@ pub struct SpawnsHeader {
     pub spawn_count: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub initial_hand: u8,
     pub additional_gems: i32,

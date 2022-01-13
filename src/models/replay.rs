@@ -552,7 +552,7 @@ impl DdRpl {
             for event in &frame.events {
                 match event {
                     ReplayEvent::PlayerDeath(death_data) => {
-                        death_type = death_data.death_type as usize;
+                        death_type = death_data.death_type as u8;
                     },
                     ReplayEvent::EndFrame(_button_data, mouse_data) => {
                         if mouse_data.look_speed.is_some() {

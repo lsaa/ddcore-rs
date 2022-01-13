@@ -546,10 +546,14 @@ impl DdRpl {
 
         let mut homing_history = vec![];
         let mut homing_used_history = vec![];
+        let mut death_type = 0;
 
         for frame in &self.data.frames {
             for event in &frame.events {
                 match event {
+                    ReplayEvent::PlayerDeath(death_data) => {
+                        death_type = death_data.death_type as usize;
+                    },
                     ReplayEvent::EndFrame(_button_data, mouse_data) => {
                         if mouse_data.look_speed.is_some() {
                             old_extra.look_speed = mouse_data.look_speed.unwrap();
@@ -606,6 +610,7 @@ impl DdRpl {
         old_extra.homing = homing_history;
         old_extra.homing_used = homing_used_history;
         old_extra.time += (frame_count + 1) as f32 / 60.;
+        old_extra.death_type = death_type;
 
         self.extra = Some(old_extra);
 

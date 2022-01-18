@@ -30,6 +30,14 @@ pub fn md5_to_string(digest: &[u8]) -> String {
     return s;
 }
 
+pub fn md5_to_string_lower(digest: &[u8]) -> String {
+    let mut s = String::with_capacity(2* digest.len());
+    for byte in digest {
+        write!(s, "{:02x}", byte).expect("Couldn't decode hash byte");
+    }
+    return s;
+}
+
 pub unsafe fn as_bytes<T: Sized>(p: &T) -> &[u8] {
     ::std::slice::from_raw_parts(
         (p as *const T) as *const u8,

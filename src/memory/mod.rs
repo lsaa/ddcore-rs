@@ -125,19 +125,10 @@ impl GameConnection {
     pub fn try_create(params: ConnectionParams) -> Result<Self, String> {
         let os_info = OsInfo::get_from_os(&params.operating_system);
         let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
-        let mut proc = get_proc(&proc_name);
+        let proc = get_proc(&proc_name);
         if proc.is_none() { return Err("Process not found".into()); }
-        let mut pid = proc.as_ref().unwrap().1;
-        let mut handle = process_memory::Pid::from(pid as u32).try_into_process_handle().unwrap();
-        let mut c = None;
-        if let Err(e) = handle.copy_address(0, &mut [0u8]) {
-            if e.kind() == std::io::ErrorKind::PermissionDenied && os_info.can_create_child && params.create_child {
-                c = create_as_child(pid);
-                proc = get_proc(&proc_name);
-                pid = proc.as_ref().unwrap().1;
-                handle = process_memory::Pid::from(pid as u32).try_into_process_handle().unwrap();
-            }
-        }
+        let pid = proc.as_ref().unwrap().1;
+        let handle = process_memory::Pid::from(pid as u32).try_into_process_handle().unwrap();
         let base_address = base_addr(handle, &params);
         if base_address.is_err() { return Err("Coudln't get base address".into()); }
         let base_address = base_address.unwrap();
@@ -146,7 +137,7 @@ impl GameConnection {
             handle,
             base_address,
             path: proc.as_ref().unwrap().0.clone(),
-            child_handle: c,
+            child_handle: None,
             last_fetch: None,
             params,
             pointers: Pointers::default()
@@ -340,7 +331,7 @@ impl GameConnection {
         }
     }
 
-    pub fn play_replay(&self, replay: Vec<u8>) -> anyhow::Result<()> {
+    pub fn play_replay(&self, replay: std::sync::Arc<Vec<u8>>) -> anyhow::Result<()> {
         use process_memory::*;
         if let Some(last_data) = &self.last_fetch {
             #[cfg(feature = "logger")]
@@ -536,7 +527,7 @@ pub fn get_base_address(pid: Pid, _proc_name: String) -> Result<usize, std::io::
 }
 
 #[cfg(target_os = "windows")]
-fn create_as_child(_pid: Pid) -> Option<Child> {
+fn _create_as_child(_pid: Pid) -> Option<Child> {
     return None;
 }
 

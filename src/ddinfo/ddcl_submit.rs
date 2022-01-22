@@ -99,11 +99,11 @@ pub struct GameState {
 
 impl SubmitRunRequest {
     pub fn from_compiled_run<T: ToString, K: ToString>(
-        run: &StatsBlockWithFrames, 
+        run: std::sync::Arc<StatsBlockWithFrames>, 
         secrets: Option<DdclSecrets>, 
         client: T, 
         version: K,
-        replay_bin: Vec<u8>
+        replay_bin: std::sync::Arc<Vec<u8>>
     ) -> anyhow::Result<Self> {
         if secrets.is_none() {
             bail!("Missing DDCL Secrets");
@@ -183,7 +183,7 @@ impl SubmitRunRequest {
 
         let validation = crypto_encoder::encrypt_and_encode(to_encrypt, sec.pass, sec.salt, sec.iv)?;
         
-        let replay_bin = base64::encode(replay_bin);
+        let replay_bin = base64::encode(&replay_bin[..]);
 
         Ok(Self {
             survival_hash_md5: base64::encode(&run.block.survival_md5),
@@ -220,11 +220,11 @@ impl SubmitRunRequest {
 }
 
 pub async fn submit<T: ToString, K: ToString>(
-    data: &StatsBlockWithFrames,
+    data: std::sync::Arc<StatsBlockWithFrames>,
     secrets: Option<DdclSecrets>, 
     client: T, 
     version: K, 
-    replay_bin: Vec<u8>
+    replay_bin: std::sync::Arc<Vec<u8>>
 ) -> anyhow::Result<()> {
     if replay_bin.is_empty() {
         bail!("No bytes in replay!");

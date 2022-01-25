@@ -20,6 +20,7 @@ const STATS_FRAME_SIZE: usize = size_of::<StatsFrame>();
 thread_local! {
     static BLOCK_BUF: RefCell<[u8; DATA_BLOCK_SIZE]> = RefCell::new([0_u8; DATA_BLOCK_SIZE]);
     static FRAME_BUF: RefCell<[u8; STATS_FRAME_SIZE]> = RefCell::new([0_u8; STATS_FRAME_SIZE]);
+    static SYSTEM: RefCell<System> = RefCell::new(System::new_all());
 }
 
 /////////////////////////////// Structs
@@ -361,11 +362,14 @@ impl GameConnection {
 ///////////////////////////////
 
 pub fn get_proc(process_name: &str) -> Option<(String, Pid)> {
-    let s = System::new_all();
-    for process in s.get_process_by_name(process_name) {
-        return Some((String::from(process.exe().to_str().unwrap()), process.pid()));
-    }
-    None
+    SYSTEM.with(|s| {
+        let mut s = s.borrow_mut();
+        s.refresh_processes();
+        for process in s.process_by_name(process_name) {
+            return Some((String::from(process.exe().to_str().unwrap()), process.pid()));
+        }
+        None
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -373,6 +377,11 @@ pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usi
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
     let pid = unsafe { winapi::um::processthreadsapi::GetProcessId(handle.0) as usize };
+    #[cfg(feature = "logger")]
+    log::info!("reading base address: {} {}", pid, proc_name);
+    // Artificial Wait :))))))
+    use std::time::Duration;
+    std::thread::sleep(Duration::from_millis(1));
     get_base_address(pid, proc_name)
 }
 

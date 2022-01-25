@@ -40,3 +40,24 @@ pub async fn upload_replay(replay: Arc<Vec<u8>>) -> Result<()> {
     
     Ok(())
 }
+
+pub async fn create_ddstats_trace<T: ToString>(game_id: u64, replay_hash: T) -> Result<()> {
+    let https = HttpsConnector::new();
+    let client = Client::builder().build::<_, hyper::Body>(https);
+    let path = format!("trace?id={}&md5_hash={}", game_id, replay_hash.to_string());
+    let uri = format!("https://ddreplay.herokuapp.com/{}", path);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap();
+    let mut res = client.request(req).await?;
+    let mut body = Vec::new();
+    while let Some(chunk) = res.body_mut().next().await {
+        body.extend_from_slice(&chunk?);
+    }
+    if res.status() != 200 {
+        unsafe { anyhow::bail!(String::from_utf8_unchecked(body)); }
+    }
+    Ok(())
+}

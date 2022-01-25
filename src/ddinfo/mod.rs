@@ -136,7 +136,7 @@ pub async fn get_leaderboard(rank_start: i32) -> Result<Leaderboard> {
 pub async fn get_leaderboard_user_by_id(uid: i32) -> Result<Entry> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let path = format!("api/leaderboards/user/by-id?userId={}", uid);
+    let path = format!("api/leaderboards/entry/by-id?id={}", uid);
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()
         .header("accept", "application/json")
@@ -159,7 +159,7 @@ pub async fn get_leaderboard_user_by_id(uid: i32) -> Result<Entry> {
 pub async fn get_leaderboard_user_by_username<T: ToString>(username: T) -> Result<Vec<Entry>>{
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let path = format!("api/leaderboards/user/by-username?username={}", username.to_string());
+    let path = format!("api/leaderboards/entry/by-username?username={}", username.to_string());
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()
         .header("accept", "application/json")
@@ -182,7 +182,7 @@ pub async fn get_leaderboard_user_by_username<T: ToString>(username: T) -> Resul
 pub async fn get_leaderboard_user_by_rank(rank: i32) -> Result<Entry> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let path = format!("api/leaderboards/user/by-rank?rank={}", rank);
+    let path = format!("api/leaderboards/entry/by-rank?rank={}", rank);
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()
         .header("accept", "application/json")

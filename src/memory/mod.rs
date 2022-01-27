@@ -519,19 +519,20 @@ unsafe extern "system" fn enumerate_callback(hwnd: winapi::shared::windef::HWND,
 pub unsafe fn get_base_address(pid: Pid, _proc_name: String) -> anyhow::Result<usize> {
     // This is miserable
     use winapi::um::handleapi::CloseHandle;
-    use winapi::um::tlhelp32::MODULEENTRY32;
+    use std::{mem::size_of_val, os::raw::c_ulong};
 
     let snapshot = winapi::um::tlhelp32::CreateToolhelp32Snapshot(
         winapi::um::tlhelp32::TH32CS_SNAPMODULE | winapi::um::tlhelp32::TH32CS_SNAPMODULE32,
-   pid as winapi::shared::minwindef::DWORD,
+        pid as winapi::shared::minwindef::DWORD,
     );
 
-    let mut module = std::mem::MaybeUninit::<MODULEENTRY32>::uninit();
-    winapi::um::tlhelp32::Module32First(snapshot, module.as_mut_ptr());
-    let module = module.assume_init();
-    let base = (module.modBaseAddr as usize).clone();
+    let mut me = winapi::um::tlhelp32::MODULEENTRY32::default();
+    me.dwSize = size_of_val(&me) as c_ulong as winapi::shared::minwindef::DWORD;
+    winapi::um::tlhelp32::Module32First(snapshot, &mut me);
+
+    let res = me.modBaseAddr.clone() as usize;
     CloseHandle(snapshot);
-    return Ok(base);
+    Ok(res)
 }
 
 #[cfg(target_os = "windows")]

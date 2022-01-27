@@ -6,6 +6,7 @@ use anyhow::Result;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::OwnedHandle;
+#[cfg(target_os = "windows")]
 use process_memory::Architecture;
 
 #[cfg(target_os = "linux")]
@@ -125,10 +126,10 @@ impl Handle {
 
     #[cfg(target_os = "linux")]
     pub fn new(pid: usize) -> Result<Self> {
-        Self {
-            inner: process_memory::Pid::from(pid as u32).try_into_process_handle()?,
+        Ok(Self {
+            inner: process_memory::Pid::from(pid as i32).try_into_process_handle()?,
             pid
-        }
+        })
     }
 
     #[cfg(target_os = "linux")]
@@ -141,17 +142,19 @@ impl Handle {
 
     #[cfg(target_os = "linux")]
     pub fn copy_address(&self, addr: usize, buf: &mut [u8]) -> Result<()> {
-        self.inner.copy_address(addr, buf)?
+        Ok(self.inner.copy_address(addr, buf)?)
     }
 
     #[cfg(target_os = "linux")]
     pub fn put_address(&self, addr: usize, buf: &[u8]) -> Result<()> {
-        self.inner.put_address(addr, buf)?
+        use process_memory::PutAddress;
+        self.inner.put_address(addr, buf)?;
+        Ok(())
     }
 
     #[cfg(target_os = "linux")]
     pub fn get_offset(&self, offsets: &[usize]) -> Result<usize> {
-        self.inner.get_offset(offsets)?
+        Ok(self.inner.get_offset(offsets)?)
     }
 
     #[cfg(target_os = "linux")]

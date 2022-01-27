@@ -118,12 +118,6 @@ impl ConnectionParams {
     }
 }
 
-// HAHAHAHAHHAH WINDOWS
-#[cfg(target_os = "windows")]
-unsafe impl Send for GameConnection {}
-#[cfg(target_os = "windows")]
-unsafe impl Sync for GameConnection {}
-
 impl GameConnection {
     #[cfg(target_os = "windows")]
     pub fn try_create(params: ConnectionParams) -> anyhow::Result<Self> {
@@ -151,25 +145,25 @@ impl GameConnection {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn try_create(params: ConnectionParams) -> Result<Self, String> {
+    pub fn try_create(params: ConnectionParams) -> anyhow::Result<Self> {
         let os_info = OsInfo::get_from_os(&params.operating_system);
         let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
         let mut proc = get_proc(&proc_name);
-        if proc.is_none() { return Err("Process not found".into()); }
+        if proc.is_none() { anyhow::bail!("Process not found") }
         let mut pid = proc.as_ref().unwrap().1;
-        let mut handle = process_memory::Pid::from(pid).try_into_process_handle().unwrap();
+        let mut handle = Handle::new(pid as usize)?;
         let mut c = None;
-        if let Err(e) = handle.copy_address(0, &mut [0u8]) {
-            if e.kind() == std::io::ErrorKind::PermissionDenied && os_info.can_create_child && params.create_child {
-                c = create_as_child(pid);
-                proc = get_proc(&proc_name);
-                pid = proc.as_ref().unwrap().1;
-                handle = process_memory::Pid::from(pid).try_into_process_handle().unwrap();
-            }
+        if let Err(_) = handle.copy_address(0, &mut [0u8]) {
+            c = create_as_child(pid);
+            proc = get_proc(&proc_name);
+            pid = proc.as_ref().unwrap().1;
+            handle = Handle::new(pid as usize)?;
         }
-        let base_address = base_addr(handle, &params);
-        if base_address.is_err() { return Err(format!("Couldn't find base addr {:?}", base_address.err())); }
+        let base_address = base_addr(&handle, &params);
+        if base_address.is_err() { anyhow::bail!("Couldn't get base address") }
         let base_address = base_address.unwrap();
+        let mut ptrs = Pointers::default();
+        ptrs.base_address = Some(base_address);
         Ok(Self {
             pid,
             handle,
@@ -178,7 +172,7 @@ impl GameConnection {
             child_handle: c,
             last_fetch: None,
             params,
-            pointers: Pointers::default()
+            pointers: ptrs
         })
     }
 
@@ -389,13 +383,13 @@ pub fn base_addr(handle: &Handle, params: &ConnectionParams) -> anyhow::Result<u
 }
 
 #[cfg(target_os = "linux")]
-pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) ->  anyhow::Result<usize> {
+pub fn base_addr(handle: &Handle, params: &ConnectionParams) ->  anyhow::Result<usize> {
     use std::io::Read;
 
     use scan_fmt::scan_fmt;
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
-    let pid = handle.0;
+    let pid = handle.pid as i32;
     
     match &params.operating_system {
         &OperatingSystem::Linux => get_base_address(pid, proc_name),
@@ -464,7 +458,7 @@ pub fn get_base_address(pid: Pid, proc_name: String) -> anyhow::Result<usize> {
     };
 
     let f = BufReader::new(File::open(format!("/proc/{}/maps", pid))?);
-    let handle = pid.try_into_process_handle().expect("Coudln't create handle from PID");
+    let handle = Handle::new(pid as usize)?;
     let mut magic_buf = [0u8; 4];
 
     for line in f.lines() {

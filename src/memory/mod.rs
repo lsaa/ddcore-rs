@@ -7,9 +7,12 @@ use std::mem::size_of;
 use std::cell::RefCell;
 use std::process::Child;
 use anyhow::bail;
-use process_memory::{CopyAddress, ProcessHandle, ProcessHandleExt, TryIntoProcessHandle};
 use sysinfo::{Pid, ProcessExt, System, SystemExt};
 use crate::models::{StatsBlockWithFrames, StatsDataBlock, StatsFrame};
+
+use self::proc_mem_wrapper::Handle;
+
+pub mod proc_mem_wrapper;
 
 ///////////////////////////////
 ///////////////////////////////
@@ -43,7 +46,7 @@ pub enum OperatingSystem {
 pub struct GameConnection {
     pub pid: Pid,
     pub path: String,
-    pub handle: ProcessHandle,
+    pub handle: Handle,
     pub base_address: usize,
     pub last_fetch: Option<StatsBlockWithFrames>,
     pub child_handle: Option<Child>,
@@ -123,16 +126,18 @@ unsafe impl Sync for GameConnection {}
 
 impl GameConnection {
     #[cfg(target_os = "windows")]
-    pub fn try_create(params: ConnectionParams) -> Result<Self, String> {
+    pub fn try_create(params: ConnectionParams) -> anyhow::Result<Self> {
         let os_info = OsInfo::get_from_os(&params.operating_system);
         let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
         let proc = get_proc(&proc_name);
-        if proc.is_none() { return Err("Process not found".into()); }
+        if proc.is_none() { anyhow::bail!("Process not found") }
         let pid = proc.as_ref().unwrap().1;
-        let handle = process_memory::Pid::from(pid as u32).try_into_process_handle().unwrap();
-        let base_address = base_addr(handle, &params);
-        if base_address.is_err() { return Err("Coudln't get base address".into()); }
+        let handle = Handle::new(pid)?;
+        let base_address = base_addr(&handle, &params);
+        if base_address.is_err() { anyhow::bail!("Couldn't get base address") }
         let base_address = base_address.unwrap();
+        let mut ptrs = Pointers::default();
+        ptrs.base_address = Some(base_address);
         Ok(Self {
             pid,
             handle,
@@ -141,7 +146,7 @@ impl GameConnection {
             child_handle: None,
             last_fetch: None,
             params,
-            pointers: Pointers::default()
+            pointers: ptrs
         })
     }
 
@@ -183,7 +188,7 @@ impl GameConnection {
             base_address: 0,
             last_fetch: None,
             path: String::new(),
-            handle: ProcessHandle::null_type(),
+            handle: Handle::null_type(),
             child_handle: None,
             params: ConnectionParams::empty(),
             pointers: Pointers::default()
@@ -191,24 +196,26 @@ impl GameConnection {
     }
 
     pub fn is_alive(&self) -> bool {
-        match self.handle.copy_address(self.base_address, &mut [0u8]) {
+        let mut buf = [0u8, 0];
+        match self.handle.copy_address(self.base_address, &mut buf) {
             Ok(_) => true,
             Err(_e) => false
         }
     }
 
-    pub fn is_alive_res(&self) -> Result<(), std::io::Error> {
-        match self.handle.copy_address(self.base_address, &mut [0u8]) {
+    pub fn is_alive_res(&self) -> anyhow::Result<()> {
+        let mut buf = [0u8];
+        match self.handle.copy_address(self.base_address, &mut buf) {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
         }
     }
 
-    pub fn read_stats_block(&mut self) -> Result<StatsDataBlock, std::io::Error> {
-        read_stats_data_block(self.handle, &self.params, &mut self.pointers)
+    pub fn read_stats_block(&mut self) -> anyhow::Result<StatsDataBlock> {
+        read_stats_data_block(&self.handle, &self.params, &mut self.pointers)
     }
 
-    pub fn read_mem(&self, addr: usize, buffer: &mut [u8]) -> Result<(), std::io::Error> {
+    pub fn read_mem(&self, addr: usize, buffer: &mut [u8]) -> anyhow::Result<()> {
         self.handle.copy_address(addr, buffer)
     }
 
@@ -234,8 +241,8 @@ impl GameConnection {
         // pep
     }
 
-    pub fn read_stats_block_with_frames(&mut self) -> Result<StatsBlockWithFrames, std::io::Error> {
-        if let Ok(data) = read_stats_data_block(self.handle, &self.params, &mut self.pointers) {
+    pub fn read_stats_block_with_frames(&mut self) -> anyhow::Result<StatsBlockWithFrames> {
+        if let Ok(data) = read_stats_data_block(&self.handle, &self.params, &mut self.pointers) {
             let res = StatsBlockWithFrames {
                 frames: self.stat_frames_from_block(&data)?,
                 block: data,
@@ -243,13 +250,13 @@ impl GameConnection {
             self.last_fetch = Some(res.clone());
             return Ok(res);
         }
-        Err(std::io::Error::new(std::io::ErrorKind::NotFound, "No data"))
+        Err(anyhow::anyhow!(std::io::Error::new(std::io::ErrorKind::NotFound, "No data")))
     }
 
     pub fn stat_frames_from_block(
         &mut self,
         block: &StatsDataBlock,
-    ) -> Result<Vec<StatsFrame>, std::io::Error> {
+    ) -> anyhow::Result<Vec<StatsFrame>> {
         let (mut ptr, len) = (
             block.get_stats_pointer(),
             block.stats_frames_loaded as usize,
@@ -267,7 +274,7 @@ impl GameConnection {
         })
     }
 
-    pub fn replay_bin(&mut self) -> Result<Vec<u8>, std::io::Error> {
+    pub fn replay_bin(&mut self) -> anyhow::Result<Vec<u8>> {
         if let Some(block) = &self.last_fetch {
             let (ptr, len) = (
                 block.block.get_replay_pointer(),
@@ -277,15 +284,14 @@ impl GameConnection {
             self.handle.copy_address(ptr, &mut res)?;
             Ok(res)
         } else {
-            Err(std::io::Error::new(
+            Err(anyhow::anyhow!(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Stats not available",
-            ))
+            )))
         }
     }
 
-    pub fn stat_frames(&self) -> Result<Vec<StatsFrame>, std::io::Error> {
-        use process_memory::*;
+    pub fn stat_frames(&self) -> anyhow::Result<Vec<StatsFrame>> {
         if let Some(last_data) = &self.last_fetch {
             let (mut ptr, len) = (
                 last_data.block.get_stats_pointer(),
@@ -303,15 +309,14 @@ impl GameConnection {
                 return Ok(res);
             })
         } else {
-            Err(std::io::Error::new(
+            Err(anyhow::anyhow!(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Stats not available",
-            ))
+            )))
         }
     }
 
-    pub fn last_stat_frame(&self) -> Result<StatsFrame, std::io::Error> {
-        use process_memory::*;
+    pub fn last_stat_frame(&self) -> anyhow::Result<StatsFrame> {
         if let Some(last_data) = &self.last_fetch {
             let (mut ptr, len) = (
                 last_data.block.get_stats_pointer(),
@@ -325,15 +330,14 @@ impl GameConnection {
                 return Ok(body[0].clone());
             })
         } else {
-            Err(std::io::Error::new(
+            Err(anyhow::anyhow!(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Stats not available",
-            ))
+            )))
         }
     }
 
     pub fn play_replay(&self, replay: std::sync::Arc<Vec<u8>>) -> anyhow::Result<()> {
-        use process_memory::*;
         if let Some(last_data) = &self.last_fetch {
             #[cfg(feature = "logger")]
             log::info!("Attempting to load replay");
@@ -373,20 +377,19 @@ pub fn get_proc(process_name: &str) -> Option<(String, Pid)> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usize, std::io::Error> {
+pub fn base_addr(handle: &Handle, params: &ConnectionParams) -> anyhow::Result<usize> {
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
-    let pid = unsafe { winapi::um::processthreadsapi::GetProcessId(handle.0) as usize };
     #[cfg(feature = "logger")]
-    log::info!("reading base address: {} {}", pid, proc_name);
-    // Artificial Wait :))))))
-    use std::time::Duration;
-    std::thread::sleep(Duration::from_millis(1));
-    get_base_address(pid, proc_name)
+    log::info!("reading base address: {} {}", handle.pid, proc_name);
+    let addr = unsafe { get_base_address(handle.pid, proc_name) };
+    #[cfg(feature = "logger")]
+    log::info!("base address: {:?}", addr);
+    addr
 }
 
 #[cfg(target_os = "linux")]
-pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usize, std::io::Error> {
+pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) ->  anyhow::Result<usize> {
     use std::io::Read;
 
     use scan_fmt::scan_fmt;
@@ -407,7 +410,7 @@ pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usi
             BufReader::new(File::open(format!("/proc/{}/stat", pid))?).read_to_string(&mut stat)?;
 
             if !stat.contains("dd.exe") {
-                return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Not the correct process"));
+                return Err(anyhow::anyhow!(std::io::Error::new(std::io::ErrorKind::NotFound, "Not the correct process")));
             }
 
             let f = BufReader::new(File::open(format!("/proc/{}/maps", pid))?);
@@ -434,10 +437,10 @@ pub fn base_addr(handle: ProcessHandle, params: &ConnectionParams) -> Result<usi
                 }
             }
 
-            Err(std::io::Error::new(
+            Err(anyhow::anyhow!(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "No base address",
-            ))
+            )))
         }
     }
 }
@@ -453,7 +456,7 @@ pub fn is_windows_exe(start_bytes: &[u8; 2]) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-pub fn get_base_address(pid: Pid, proc_name: String) -> Result<usize, std::io::Error> {
+pub fn get_base_address(pid: Pid, proc_name: String) -> anyhow::Result<usize> {
     use scan_fmt::scan_fmt;
     use std::{
         fs::File,
@@ -480,10 +483,10 @@ pub fn get_base_address(pid: Pid, proc_name: String) -> Result<usize, std::io::E
         }
     }
 
-    Err(std::io::Error::new(
+    Err(anyhow::anyhow!(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         "No base address",
-    ))
+    )))
 }
 
 #[cfg(target_os = "windows")]
@@ -513,26 +516,22 @@ unsafe extern "system" fn enumerate_callback(hwnd: winapi::shared::windef::HWND,
 }
 
 #[cfg(target_os = "windows")]
-pub fn get_base_address(pid: Pid, _proc_name: String) -> Result<usize, std::io::Error> {
+pub unsafe fn get_base_address(pid: Pid, _proc_name: String) -> anyhow::Result<usize> {
     // This is miserable
     use winapi::um::handleapi::CloseHandle;
-    use std::os::raw::c_ulong;
     use winapi::um::tlhelp32::MODULEENTRY32;
 
-    let snapshot = unsafe {
-        winapi::um::tlhelp32::CreateToolhelp32Snapshot(
-            winapi::um::tlhelp32::TH32CS_SNAPMODULE | winapi::um::tlhelp32::TH32CS_SNAPMODULE32,
-            pid as u32 as c_ulong as winapi::shared::minwindef::DWORD,
-        )
-    };
+    let snapshot = winapi::um::tlhelp32::CreateToolhelp32Snapshot(
+        winapi::um::tlhelp32::TH32CS_SNAPMODULE | winapi::um::tlhelp32::TH32CS_SNAPMODULE32,
+   pid as winapi::shared::minwindef::DWORD,
+    );
 
     let mut module = std::mem::MaybeUninit::<MODULEENTRY32>::uninit();
-    unsafe {
-        winapi::um::tlhelp32::Module32First(snapshot, module.as_mut_ptr());
-        CloseHandle(snapshot);
-        let module = module.assume_init();
-        return Ok(module.modBaseAddr as usize);
-    }
+    winapi::um::tlhelp32::Module32First(snapshot, module.as_mut_ptr());
+    let module = module.assume_init();
+    let base = (module.modBaseAddr as usize).clone();
+    CloseHandle(snapshot);
+    return Ok(base);
 }
 
 #[cfg(target_os = "windows")]
@@ -577,7 +576,7 @@ fn create_as_child(pid: Pid) -> Option<Child> {
     return None;
 }
 
-pub fn mem_search(handle: ProcessHandle, to_find: &[u8]) -> Result<usize, std::io::Error> {
+pub fn mem_search(handle: &Handle, to_find: &[u8]) -> anyhow::Result<usize> {
     let mut big_ass_buffer = [0_u8; 1024 * 100]; // 100kb buffer
     let mut offset = 0x00010000;
     loop {
@@ -591,7 +590,7 @@ pub fn mem_search(handle: ProcessHandle, to_find: &[u8]) -> Result<usize, std::i
     }
 }
 
-fn calc_pointer_ddstats_block(handle: ProcessHandle, params: &ConnectionParams, base_address: usize) -> Result<usize, std::io::Error> {
+fn calc_pointer_ddstats_block(handle: &Handle, params: &ConnectionParams, base_address: usize) -> anyhow::Result<usize> {
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let block_start = params.overrides.block_marker.unwrap_or(os_info.default_block_marker);
     match &params.operating_system {
@@ -602,27 +601,26 @@ fn calc_pointer_ddstats_block(handle: ProcessHandle, params: &ConnectionParams, 
             handle.get_offset(&[base_address + block_start, 0])
         },
         &OperatingSystem::LinuxProton => {
-            mem_search(handle, b"__ddstats__")
+            mem_search(&handle, b"__ddstats__")
         }
     }
 }
 
-pub fn read_stats_data_block(handle: ProcessHandle, params: &ConnectionParams, pointers: &mut Pointers) -> Result<StatsDataBlock, std::io::Error> {
-    use process_memory::*;
-    let base = if pointers.base_address.is_none() { base_addr(handle, params)? } else { pointers.base_address.as_ref().unwrap().clone() };
+pub fn read_stats_data_block(handle: &Handle, params: &ConnectionParams, pointers: &mut Pointers) -> anyhow::Result<StatsDataBlock> {
+    let base = if pointers.base_address.is_none() { base_addr(&handle, params)? } else { pointers.base_address.as_ref().unwrap().clone() };
     pointers.base_address = Some(base);
     BLOCK_BUF.with(|buf| {
         let pointer;
         if let Some(ddstats_ptr) = pointers.ddstats_block {
             pointer = ddstats_ptr;
         } else {
-            pointers.ddstats_block = Some(calc_pointer_ddstats_block(handle, params, base)?);
+            pointers.ddstats_block = Some(calc_pointer_ddstats_block(&handle, params, base)?);
             pointer = pointers.ddstats_block.as_ref().unwrap().clone();
         }
         let mut buf = buf.borrow_mut();
         handle.copy_address(pointer, buf.as_mut())?;
         if !buf.starts_with(b"__ddstats__") {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "No ddstats block found at address"));
+            return Err(anyhow::anyhow!(std::io::Error::new(std::io::ErrorKind::InvalidData, "No ddstats block found at address")));
         }
         let (_head, body, _tail) = unsafe { buf.as_mut().align_to::<StatsDataBlock>() };
         Ok(body[0].clone())

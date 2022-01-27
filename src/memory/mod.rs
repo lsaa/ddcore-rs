@@ -154,10 +154,12 @@ impl GameConnection {
         let mut handle = Handle::new(pid as usize)?;
         let mut c = None;
         if let Err(_) = handle.copy_address(0, &mut [0u8]) {
-            c = create_as_child(pid);
-            proc = get_proc(&proc_name);
-            pid = proc.as_ref().unwrap().1;
-            handle = Handle::new(pid as usize)?;
+            if params.create_child {
+                c = create_as_child(pid);
+                proc = get_proc(&proc_name);
+                pid = proc.as_ref().unwrap().1;
+                handle = Handle::new(pid as usize)?;
+            }
         }
         let base_address = base_addr(&handle, &params);
         if base_address.is_err() { anyhow::bail!("Couldn't get base address") }

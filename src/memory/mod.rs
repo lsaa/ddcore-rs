@@ -238,15 +238,20 @@ impl GameConnection {
     }
 
     pub fn read_stats_block_with_frames(&mut self) -> anyhow::Result<StatsBlockWithFrames> {
-        if let Ok(data) = read_stats_data_block(&self.handle, &self.params, &mut self.pointers) {
-            let res = StatsBlockWithFrames {
-                frames: self.stat_frames_from_block(&data)?,
-                block: data,
-            };
-            self.last_fetch = Some(res.clone());
-            return Ok(res);
+        match read_stats_data_block(&self.handle, &self.params, &mut self.pointers) {
+            Ok(data) => {
+                let res = StatsBlockWithFrames {
+                    frames: self.stat_frames_from_block(&data)?,
+                    block: data,
+                };
+                self.last_fetch = Some(res.clone());
+                Ok(res)
+            },
+            Err(e) => {
+                log::info!("{e:?}");
+                Err(anyhow::anyhow!(e))
+            }
         }
-        Err(anyhow::anyhow!(std::io::Error::new(std::io::ErrorKind::NotFound, "No data")))
     }
 
     pub fn stat_frames_from_block(
@@ -590,6 +595,7 @@ pub fn mem_search(handle: &Handle, to_find: &[u8]) -> anyhow::Result<usize> {
 fn calc_pointer_ddstats_block(handle: &Handle, params: &ConnectionParams, base_address: usize) -> anyhow::Result<usize> {
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let block_start = params.overrides.block_marker.unwrap_or(os_info.default_block_marker);
+    log::info!("block start {block_start}");
     match &params.operating_system {
         &OperatingSystem::Linux => {
             handle.get_offset(&[base_address + block_start, 0])

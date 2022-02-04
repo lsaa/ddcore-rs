@@ -106,8 +106,18 @@ pub struct SpawnsetCustomLeaderboard {
 #[serde(rename_all = "camelCase")]
 pub struct SpawnsetCustomEntry {
     pub custom_entry_id: i32,
-    pub time: f64,
+    pub time: i32,
     pub has_replay: bool,
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum CustomLeaderboardDagger {
+    Pleb = 0,
+    Bronze,
+    Silver,
+    Gold,
+    Devil,
+    Leviathan
 }
 
 ////////////////////////////////// Leaderboards

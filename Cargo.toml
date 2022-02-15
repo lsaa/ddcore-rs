@@ -25,6 +25,7 @@ num-traits = "0.2"
 num-derive = "0.2"
 bytestream = "0.4.1"
 libflate = "1.1.1"
+crossbeam-utils = "0.8.7"
 serde = { version = "1.0.60", features = ["serde_derive"] }
 serde_json = { version = "1.0", optional = true }
 process-memory = { version = "0.4.0", optional = true }

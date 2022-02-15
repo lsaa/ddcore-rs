@@ -90,11 +90,11 @@ pub struct StatsBlockWithFrames {
 
 impl StatsDataBlock {
     pub fn player_username(&self) -> String {
-        utils::byte_array_to_string(&self.username[..]).unwrap_or("unknown".into())
+        utils::byte_array_to_string(&self.username[..]).unwrap_or_else(|_| "unknown".into())
     }
 
     pub fn replay_player_username(&self) -> String {
-        utils::byte_array_to_string(&self.replay_player_name[..]).unwrap_or("unknown".into())
+        utils::byte_array_to_string(&self.replay_player_name[..]).unwrap_or_else(|_| "unknown".into())
     }
 
     pub fn level_hash(&self) -> String {
@@ -102,7 +102,7 @@ impl StatsDataBlock {
         for byte in self.survival_md5 {
             write!(s, "{:02X}", byte).expect("Couldn't decode hash byte");
         }
-        return s;
+        s
     }
 
     pub fn get_stats_pointer(&self) -> usize {
@@ -124,7 +124,7 @@ impl StatsBlockWithFrames {
         let real_time = time - self.block.starting_time;
         if real_time <= 0. { return None; }
         if real_time + 1. > self.frames.len() as f32 { return None; }
-        return Some(&self.frames[real_time as usize]);
+        Some(&self.frames[real_time as usize])
     }
 
     pub fn get_frames_until_time(&self, mut time: f32) -> Vec<&StatsFrame> {
@@ -142,7 +142,7 @@ impl StatsBlockWithFrames {
         let mut neg_diff_lvl4 = 0;
         let mut last_frame_homing_lvl3 = 0;
         let mut last_frame_homing_lvl4 = 0;
-        let cutoff = if time.is_none() { f32::MAX } else { time.unwrap() };
+        let cutoff = if let Some(time) = time { time } else { f32::MAX };
         for frame in &self.get_frames_until_time(cutoff) {
             if frame.level_gems == 70 {
                 if frame.homing < last_frame_homing_lvl3 {

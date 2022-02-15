@@ -216,22 +216,22 @@ impl<SpawnType: Clone> Spawnset<SpawnType> {
             let mut header: Header = std::mem::zeroed();
             let mut arena: Arena = std::mem::zeroed();
             let mut spawns_header: SpawnsHeader = std::mem::zeroed();
-            let mut header_buf = writer_buf::<Header>(&mut header);
-            let mut arena_buf = writer_buf::<Arena>(&mut arena);
-            let mut spawns_header_buf = writer_buf::<SpawnsHeader>(&mut spawns_header);
-            source.read(&mut header_buf)?;
-            source.read(&mut arena_buf)?;
-            source.read(&mut spawns_header_buf)?;
+            let header_buf = writer_buf::<Header>(&mut header);
+            let arena_buf = writer_buf::<Arena>(&mut arena);
+            let spawns_header_buf = writer_buf::<SpawnsHeader>(&mut spawns_header);
+            source.read_exact(header_buf)?;
+            source.read_exact(arena_buf)?;
+            source.read_exact(spawns_header_buf)?;
             let spawns_len = size_of::<Spawn<SpawnType>>() * spawns_header.spawn_count as usize;
             let mut spawns_buf = vec![0u8; spawns_len];
-            source.read(&mut spawns_buf)?;
+            source.read_exact(&mut spawns_buf)?;
             let spawns: &[Spawn<SpawnType>] = align_bytes(&spawns_buf);
             let mut settings = None;
             if header.spawn_version >= 5 {
                 let mut b1 = [0u8; 1];
                 let mut b2 = [0u8; 4];
-                source.read(&mut b1)?;
-                source.read(&mut b2)?;
+                source.read_exact(&mut b1)?;
+                source.read_exact(&mut b2)?;
                 settings = Some(Settings {
                     initial_hand: u8::from_le_bytes(b1),
                     additional_gems: i32::from_le_bytes(b2),
@@ -241,7 +241,7 @@ impl<SpawnType: Clone> Spawnset<SpawnType> {
             if header.spawn_version >= 6 {
                 if let Some(sett) = &mut settings {
                     let mut b2 = [0u8; 4];
-                    source.read(&mut b2)?;
+                    source.read_exact(&mut b2)?;
                     sett.timer_start = Some(f32::from_le_bytes(b2));
                 }
             }
@@ -259,21 +259,21 @@ impl<SpawnType: Clone> Spawnset<SpawnType> {
     pub fn serialize<W: Write>(&self, sink: &mut W) -> Result<()> {
         // Safe unconditionally as it's only translating the structs to bytes
         unsafe {
-            sink.write(as_bytes(&self.header))?;
-            sink.write(as_bytes(&self.arena))?;
-            sink.write(as_bytes(&self.spawns_header))?;
+            sink.write_all(as_bytes(&self.header))?;
+            sink.write_all(as_bytes(&self.arena))?;
+            sink.write_all(as_bytes(&self.spawns_header))?;
             for spawn in &self.spawns {
-                sink.write(as_bytes(spawn))?;
+                sink.write_all(as_bytes(spawn))?;
             }
         }
         if let Some(settings) = &self.settings {
             if self.header.spawn_version >= 5 {
-                sink.write(&settings.initial_hand.to_le_bytes())?;
-                sink.write(&settings.additional_gems.to_le_bytes())?;
+                sink.write_all(&settings.initial_hand.to_le_bytes())?;
+                sink.write_all(&settings.additional_gems.to_le_bytes())?;
             }
             if let Some(timer_start) = settings.timer_start {
                 if self.header.spawn_version >= 6 {
-                    sink.write(&timer_start.to_le_bytes())?;
+                    sink.write_all(&timer_start.to_le_bytes())?;
                 }
             }
         }

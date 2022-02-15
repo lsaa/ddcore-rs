@@ -153,19 +153,16 @@ impl GameConnection {
         let mut pid = proc.as_ref().unwrap().1;
         let mut handle = Handle::new(pid as usize)?;
         let mut c = None;
-        if let Err(_) = handle.copy_address(0, &mut [0u8]) {
-            if params.create_child {
-                c = create_as_child(pid);
-                proc = get_proc(&proc_name);
-                pid = proc.as_ref().unwrap().1;
-                handle = Handle::new(pid as usize)?;
-            }
+        if handle.copy_address(0, &mut [0u8]).is_err() && params.create_child{
+            c = create_as_child(pid);
+            proc = get_proc(&proc_name);
+            pid = proc.as_ref().unwrap().1;
+            handle = Handle::new(pid as usize)?;
         }
         let base_address = base_addr(&handle, &params);
         if base_address.is_err() { anyhow::bail!("Couldn't get base address") }
         let base_address = base_address.unwrap();
-        let mut ptrs = Pointers::default();
-        ptrs.base_address = Some(base_address);
+        let ptrs = Pointers { base_address: Some(base_address), ..Default::default() };
         Ok(Self {
             pid,
             handle,
@@ -191,17 +188,15 @@ impl GameConnection {
         }
     }
 
-    pub fn is_alive(&self) -> bool {
-        let mut buf = [0u8, 0];
-        match self.handle.copy_address(self.base_address, &mut buf) {
+    pub fn is_alive(&mut self) -> bool {
+        match self.read_stats_block() {
             Ok(_) => true,
             Err(_e) => false
         }
     }
 
-    pub fn is_alive_res(&self) -> anyhow::Result<()> {
-        let mut buf = [0u8];
-        match self.handle.copy_address(self.base_address, &mut buf) {
+    pub fn is_alive_res(&mut self) -> anyhow::Result<()> {
+        match self.read_stats_block() {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
         }
@@ -248,7 +243,7 @@ impl GameConnection {
                 Ok(res)
             },
             Err(e) => {
-                log::info!("{e:?}");
+                log::info!("[DDCORE] Failed to read stats block {e:?}");
                 Err(anyhow::anyhow!(e))
             }
         }
@@ -268,10 +263,10 @@ impl GameConnection {
             for _ in 0..len {
                 self.handle.copy_address(ptr, buf.as_mut())?;
                 let (_head, body, _tail) = unsafe { buf.align_to::<StatsFrame>() };
-                res.push(body[0].clone());
+                res.push(body[0]);
                 ptr += STATS_FRAME_SIZE;
             }
-            return Ok(res);
+            Ok(res)
         })
     }
 
@@ -304,10 +299,10 @@ impl GameConnection {
                 for _ in 0..len {
                     self.handle.copy_address(ptr, buf.as_mut())?;
                     let (_head, body, _tail) = unsafe { buf.align_to::<StatsFrame>() };
-                    res.push(body[0].clone());
+                    res.push(body[0]);
                     ptr += STATS_FRAME_SIZE;
                 }
-                return Ok(res);
+                Ok(res)
             })
         } else {
             Err(anyhow::anyhow!(std::io::Error::new(
@@ -328,7 +323,7 @@ impl GameConnection {
                 let mut buf = buf.borrow_mut();
                 self.handle.copy_address(ptr, buf.as_mut())?;
                 let (_head, body, _tail) = unsafe { buf.align_to::<StatsFrame>() };
-                return Ok(body[0].clone());
+                Ok(body[0])
             })
         } else {
             Err(anyhow::anyhow!(std::io::Error::new(
@@ -341,7 +336,7 @@ impl GameConnection {
     pub fn play_replay(&self, replay: std::sync::Arc<Vec<u8>>) -> anyhow::Result<()> {
         if let Some(last_data) = &self.last_fetch {
             #[cfg(feature = "logger")]
-            log::info!("Attempting to load replay");
+            log::info!("[DDCORE] Attempting to load replay");
 
             let ddstats_addr = self.pointers.ddstats_block.expect("last data can't exist without this also being set");
             let replay_buffer_addr = last_data.block.get_replay_pointer();
@@ -350,11 +345,11 @@ impl GameConnection {
             let len = replay.len() as i32;
 
             #[cfg(feature = "logger")]
-            log::info!("{:X} {:X} {:X}", ddstats_addr, replay_buffer_addr, flag_addr);
+            log::info!("[DDCORE] Replay Flag debug: {ddstats_addr:X} {replay_buffer_addr:X} {flag_addr:X}");
 
             self.handle.put_address(replay_buffer_addr, &replay)?;
             self.handle.put_address(len_addr, &len.to_le_bytes())?;
-            self.handle.put_address(flag_addr, &[1])?;
+            self.handle.put_address(flag_addr, &[true as u8])?;
 
             Ok(())
         } else {
@@ -370,7 +365,7 @@ pub fn get_proc(process_name: &str) -> Option<(String, Pid)> {
     SYSTEM.with(|s| {
         let mut s = s.borrow_mut();
         s.refresh_processes();
-        for process in s.process_by_name(process_name) {
+        if let Some(process) = s.process_by_name(process_name).first() {
             return Some((String::from(process.exe().to_str().unwrap()), process.pid()));
         }
         None
@@ -382,10 +377,10 @@ pub fn base_addr(handle: &Handle, params: &ConnectionParams) -> anyhow::Result<u
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
     #[cfg(feature = "logger")]
-    log::info!("reading base address: {} {}", handle.pid, proc_name);
+    log::info!("[DDCORE] reading base address: {} {proc_name}", handle.pid);
     let addr = unsafe { get_base_address(handle.pid, proc_name) };
     #[cfg(feature = "logger")]
-    log::info!("base address: {:?}", addr);
+    log::info!("[DDCORE] base address: {addr:?}");
     addr
 }
 
@@ -399,9 +394,9 @@ pub fn base_addr(handle: &Handle, params: &ConnectionParams) ->  anyhow::Result<
     let pid = handle.pid as i32;
     
     match &params.operating_system {
-        &OperatingSystem::Linux => get_base_address(pid, proc_name),
-        &OperatingSystem::Windows => get_base_address(pid, proc_name),
-        &OperatingSystem::LinuxProton => {
+        OperatingSystem::Linux => get_base_address(pid, proc_name),
+        OperatingSystem::Windows => get_base_address(pid, proc_name),
+        OperatingSystem::LinuxProton => {
             use std::{
                 fs::File,
                 io::{BufRead, BufReader},
@@ -418,22 +413,20 @@ pub fn base_addr(handle: &Handle, params: &ConnectionParams) ->  anyhow::Result<
             let mut magic_buf = [0u8; 2];
 
             #[cfg(feature = "logger")]
-            log::info!("Found LinuxProton dd.exe {:?}", pid);
+            log::info!("[DDCORE] Found LinuxProton dd.exe {:?}", pid);
 
-            for line in f.lines() {
-                if let Ok(line) = line {
-                    if let Ok((start, _end, _perms, mod_path)) = scan_fmt!(&line, "{x}-{x} {} {*} {*} {*} {[^\t\n]}\n", [hex usize], [hex usize], String, String)
-                    {
-                        let r = handle.copy_address(start, &mut magic_buf);
-                        if r.is_err() {
-                            #[cfg(feature = "logger")]
-                            log::info!("Failed to read memory {:?} {} {:X}", r.err(), pid, start);
-                            continue;
-                        }
+            for line in f.lines().flatten() {
+                if let Ok((start, _end, _perms, mod_path)) = scan_fmt!(&line, "{x}-{x} {} {*} {*} {*} {[^\t\n]}\n", [hex usize], [hex usize], String, String)
+                {
+                    let r = handle.copy_address(start, &mut magic_buf);
+                    if r.is_err() {
+                        #[cfg(feature = "logger")]
+                        log::info!("[DDCORE] Failed to read memory {:?} {} {:X}", r.err(), pid, start);
+                        continue;
+                    }
 
-                        if mod_path.contains("dd.exe") && is_windows_exe(&magic_buf) {
-                            return Ok(start);
-                        }
+                    if mod_path.contains("dd.exe") && is_windows_exe(&magic_buf) {
+                        return Ok(start);
                     }
                 }
             }
@@ -468,18 +461,16 @@ pub fn get_base_address(pid: Pid, proc_name: String) -> anyhow::Result<usize> {
     let handle = Handle::new(pid as usize)?;
     let mut magic_buf = [0u8; 4];
 
-    for line in f.lines() {
-        if let Ok(line) = line {
-            if let Ok((start, _end, perms, mod_path)) = scan_fmt!(&line, "{x}-{x} {} {*} {*} {*} {[^\t\n]}\n", [hex usize], [hex usize], String, String)
-            {
-                let r = handle.copy_address(start, &mut magic_buf);
-                if r.is_err() {
-                    continue;
-                }
+    for line in f.lines().flatten() {
+        if let Ok((start, _end, perms, mod_path)) = scan_fmt!(&line, "{x}-{x} {} {*} {*} {*} {[^\t\n]}\n", [hex usize], [hex usize], String, String)
+        {
+            let r = handle.copy_address(start, &mut magic_buf);
+            if r.is_err() {
+                continue;
+            }
 
-                if is_elf(&magic_buf) && mod_path.contains(&proc_name) && perms.contains("x") {
-                    return Ok(start);
-                }
+            if is_elf(&magic_buf) && mod_path.contains(&proc_name) && perms.contains('x') {
+                return Ok(start);
             }
         }
     }
@@ -575,7 +566,7 @@ fn create_as_child(pid: Pid) -> Option<Child> {
         .spawn()
         .expect("Couldn't create DD child process");
     std::env::set_current_dir(&old_cwd).expect("Couldn't set cwd");
-    return None;
+    None
 }
 
 pub fn mem_search(handle: &Handle, to_find: &[u8]) -> anyhow::Result<usize> {
@@ -595,30 +586,30 @@ pub fn mem_search(handle: &Handle, to_find: &[u8]) -> anyhow::Result<usize> {
 fn calc_pointer_ddstats_block(handle: &Handle, params: &ConnectionParams, base_address: usize) -> anyhow::Result<usize> {
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let block_start = params.overrides.block_marker.unwrap_or(os_info.default_block_marker);
-    log::info!("block start {block_start}");
+    log::info!("[DDCORE] block start {block_start}");
     match &params.operating_system {
-        &OperatingSystem::Linux => {
+        OperatingSystem::Linux => {
             handle.get_offset(&[base_address + block_start, 0])
         },
-        &OperatingSystem::Windows => {
+        OperatingSystem::Windows => {
             handle.get_offset(&[base_address + block_start, 0])
         },
-        &OperatingSystem::LinuxProton => {
-            mem_search(&handle, b"__ddstats__")
+        OperatingSystem::LinuxProton => {
+            mem_search(handle, b"__ddstats__")
         }
     }
 }
 
 pub fn read_stats_data_block(handle: &Handle, params: &ConnectionParams, pointers: &mut Pointers) -> anyhow::Result<StatsDataBlock> {
-    let base = if pointers.base_address.is_none() { base_addr(&handle, params)? } else { pointers.base_address.as_ref().unwrap().clone() };
+    let base = if pointers.base_address.is_none() { base_addr(handle, params)? } else { *pointers.base_address.as_ref().unwrap() };
     pointers.base_address = Some(base);
     BLOCK_BUF.with(|buf| {
         let pointer;
         if let Some(ddstats_ptr) = pointers.ddstats_block {
             pointer = ddstats_ptr;
         } else {
-            pointers.ddstats_block = Some(calc_pointer_ddstats_block(&handle, params, base)?);
-            pointer = pointers.ddstats_block.as_ref().unwrap().clone();
+            pointers.ddstats_block = Some(calc_pointer_ddstats_block(handle, params, base)?);
+            pointer = *pointers.ddstats_block.as_ref().unwrap();
         }
         let mut buf = buf.borrow_mut();
         handle.copy_address(pointer, buf.as_mut())?;

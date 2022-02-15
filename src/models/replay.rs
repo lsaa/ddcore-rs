@@ -279,6 +279,8 @@ pub struct MouseData {
 }
 
 impl ReplayData {
+
+    #[allow(clippy::wildcard_in_or_patterns)]
     pub fn from_reader<R: Read>(source: &mut R) -> Result<Self> {
         use bytestream::*;
         let mut decompressed = vec![];
@@ -518,7 +520,7 @@ impl DdRpl {
         if let Some(compressed_data) = &self.compressed_data {
             self.data = Some(ReplayData::from_reader(&mut &compressed_data[..])?);
             self.compressed_data = None;
-            return Ok(());
+            Ok(())
         } else {
             bail!("No compressed data");
         }
@@ -534,10 +536,8 @@ impl DdRpl {
         }
 
         let spawnset = self.header.spawnset.as_ref().unwrap().clone();
-        let mut old_extra;
-        if self.extra.is_some() {
-            old_extra = self.extra.as_ref().unwrap().clone();
-        } else {
+        let mut old_extra = self.extra.as_ref().unwrap().clone();
+        if self.extra.is_none() {
             old_extra = ExtraData {
                 homing: vec![],
                 homing_used: vec![],
@@ -549,8 +549,8 @@ impl DdRpl {
                 look_speed: 0.,
             };
         }
-        let initial_hand = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().initial_hand.clone() } else { 0 };
-        let additional_gems = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().additional_gems.clone() } else { 0 };
+        let initial_hand = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().initial_hand } else { 0 };
+        let additional_gems = if spawnset.settings.is_some() { spawnset.settings.as_ref().unwrap().additional_gems } else { 0 };
 
         old_extra.starting_hand = initial_hand;
         old_extra.starting_gems = additional_gems;
@@ -561,7 +561,6 @@ impl DdRpl {
         let mut level_gems = 0;
         let mut homing = 0;
         let mut homing_used = 0;
-        let mut frame_count = 0;
 
         match &old_extra.starting_hand {
             3 => { level_gems = 70; homing = old_extra.starting_gems },
@@ -574,7 +573,7 @@ impl DdRpl {
 
         let data = self.data.as_ref().unwrap();
 
-        for frame in &data.frames {
+        for (frame_count, frame) in data.frames.iter().enumerate() {
             for event in &frame.events {
                 match event {
                     ReplayEvent::EndFrame(_button_data, mouse_data) => {
@@ -610,24 +609,18 @@ impl DdRpl {
                             homing += 1;
                         }
                     },
-                    ReplayEvent::Spawn(data) => {
-                        match data {
-                            EntityData::Dagger(dagger) => {
-                                if dagger.dagger_level.eq(&DaggerLevel::Level6) {
-                                    homing -= 1;
-                                    homing_used += 1;
-                                }
-                            },
-                            _ => {},
-                        };
+                    ReplayEvent::Spawn(EntityData::Dagger(dagger)) => {
+                        if dagger.dagger_level.eq(&DaggerLevel::Level6) {
+                            homing -= 1;
+                            homing_used += 1;
+                        }
                     },
                     _ => {},
                 }
             }
             
-            frame_count += 1;
-            homing_history.push(homing.clone());
-            homing_used_history.push(homing_used.clone());
+            homing_history.push(homing);
+            homing_used_history.push(homing_used);
         }
 
         old_extra.homing = homing_history;
@@ -641,7 +634,7 @@ impl DdRpl {
     pub fn from_reader<R: Read>(source: &mut R) -> Result<Self> {
         use bytestream::*;
 
-        source.read(&mut [0u8; 0x6])?; // ddrpl.
+        source.read_exact(&mut [0u8; 0x6])?; // ddrpl.
         let file_version = u32::read_from(source, ByteOrder::LittleEndian)?;
         let timestamp = u64::read_from(source, ByteOrder::LittleEndian)?;
         let timestamp = UNIX_EPOCH + Duration::from_secs(1455753600 + timestamp);
@@ -655,15 +648,15 @@ impl DdRpl {
         let player_id = i32::read_from(source, ByteOrder::LittleEndian)?;
         let username_len = u32::read_from(source, ByteOrder::LittleEndian)?;
         let mut username = vec![0u8; username_len as usize];
-        source.read(&mut username)?;
+        source.read_exact(&mut username)?;
         let username = String::from_utf8(username)?;
-        source.read(&mut [0u8; 10])?; // skip unknown
+        source.read_exact(&mut [0u8; 10])?; // skip unknown
         let mut spawnset_hash = [0u8; 16];
-        source.read(&mut spawnset_hash)?;
+        source.read_exact(&mut spawnset_hash)?;
         let spawnset_hash = crate::utils::md5_to_string_lower(&spawnset_hash);
         let spawnset_len = u32::read_from(source, ByteOrder::LittleEndian)?;
         let mut spawnset_bin = vec![0u8; spawnset_len as usize];
-        source.read(&mut spawnset_bin)?;
+        source.read_exact(&mut spawnset_bin)?;
         let compressed_data_len = u32::read_from(source, ByteOrder::LittleEndian)?;
 
         if compressed_data_len > 40000000 {
@@ -710,14 +703,14 @@ impl DfRpl2 {
         use bytestream::*;
 
         // Skip DF_RPL2
-        source.read(&mut [0u8; 7])?;
+        source.read_exact(&mut [0u8; 7])?;
         let username_len = u16::read_from(source, ByteOrder::LittleEndian)?;
         let mut username = vec![0u8; username_len as usize];
-        source.read(&mut username)?;
+        source.read_exact(&mut username)?;
         let username = String::from_utf8(username)?;
         let funny_bytes_len = u16::read_from(source, ByteOrder::LittleEndian)?;
         let mut funny_bytes = vec![0u8; funny_bytes_len as usize];
-        source.read(&mut funny_bytes)?;
+        source.read_exact(&mut funny_bytes)?;
 
         let header = DfRpl2Header {
             player_name: username,
@@ -771,7 +764,7 @@ fn read3_i16<R: Read>(source: &mut R) -> Result<[i16; 3]> {
 
 fn read_f32<R: Read>(source: &mut R) -> Result<f32> {
     let mut buf = [0u8; 4];
-    source.read(&mut buf)?;
+    source.read_exact(&mut buf)?;
     Ok(f32::from_le_bytes(buf))
 }
 
@@ -779,9 +772,9 @@ fn read3_f32<R: Read>(source: &mut R) -> Result<[f32; 3]> {
     let mut b1 = [0u8; 4];
     let mut b2 = [0u8; 4];
     let mut b3 = [0u8; 4];
-    source.read(&mut b1)?;
-    source.read(&mut b2)?;
-    source.read(&mut b3)?;
+    source.read_exact(&mut b1)?;
+    source.read_exact(&mut b2)?;
+    source.read_exact(&mut b3)?;
     Ok([
         f32::from_le_bytes(b1),
         f32::from_le_bytes(b2),

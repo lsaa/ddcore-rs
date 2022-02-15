@@ -12,7 +12,7 @@ pub fn byte_array_to_string(bytes: &[u8]) -> Result<String, FromUtf8Error> {
             return String::from_utf8(bytes[..i].to_vec());
         }
     }
-    return String::from_utf8(bytes[..].to_vec());
+    String::from_utf8(bytes[..].to_vec())
 }
 
 pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
@@ -27,7 +27,7 @@ pub fn md5_to_string(digest: &[u8]) -> String {
     for byte in digest {
         write!(s, "{:02X}", byte).expect("Couldn't decode hash byte");
     }
-    return s;
+    s
 }
 
 pub fn md5_to_string_lower(digest: &[u8]) -> String {
@@ -35,9 +35,11 @@ pub fn md5_to_string_lower(digest: &[u8]) -> String {
     for byte in digest {
         write!(s, "{:02x}", byte).expect("Couldn't decode hash byte");
     }
-    return s;
+    s
 }
 
+/// # Safety
+/// Utility function, shouldn't be considered always safe
 pub unsafe fn as_bytes<T: Sized>(p: &T) -> &[u8] {
     ::std::slice::from_raw_parts(
         (p as *const T) as *const u8,
@@ -45,11 +47,15 @@ pub unsafe fn as_bytes<T: Sized>(p: &T) -> &[u8] {
     )
 }
 
+/// # Safety
+/// Utility function, shouldn't be considered always safe
 pub unsafe fn align_bytes<T>(slice: &[u8]) -> &[T] {
     let (_head, body, _tail) = slice.align_to::<T>();
     body
 }
 
+/// # Safety
+/// Utility function, shouldn't be considered always safe
 pub unsafe fn writer_buf<'a, T: Sized>(source: &mut T) -> &'a mut [u8] {
     std::slice::from_raw_parts_mut(source as *mut _ as *mut u8, size_of::<T>())
 }
@@ -77,8 +83,8 @@ impl PartialEq for Version {
 
 impl PartialOrd for Version {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let mut self_split = self.s.split(".").map(|x| i32::from_str_radix(x, 10).unwrap());
-        let mut other_split = other.s.split(".").map(|x| i32::from_str_radix(x, 10).unwrap());
+        let mut self_split = self.s.split('.').map(|x| x.parse::<i32>().unwrap());
+        let mut other_split = other.s.split('.').map(|x| x.parse::<i32>().unwrap());
         let (major,minor,build,rev) = (self_split.next()?, self_split.next()?, self_split.next()?, self_split.next()?);
         let (omajor,ominor,obuild,orev) = (other_split.next()?, other_split.next()?, other_split.next()?, other_split.next()?);
 

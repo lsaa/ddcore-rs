@@ -126,7 +126,7 @@ impl GameConnection {
         let proc = get_proc(&proc_name);
         if proc.is_none() { anyhow::bail!("Process not found") }
         let pid = proc.as_ref().unwrap().1;
-        let handle = Handle::new(pid)?;
+        let handle = Handle::new(pid.as_u32() as usize)?;
         let base_address = base_addr(&handle, &params);
         if base_address.is_err() { anyhow::bail!("Couldn't get base address") }
         let base_address = base_address.unwrap();
@@ -218,7 +218,7 @@ impl GameConnection {
         enumerate_windows(|hwnd: HWND| {
             let mut pid: DWORD = DWORD::default();
             unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid); }
-            if pid as u32 != self.pid as u32 {
+            if pid as u32 != self.pid.as_u32() {
                 true
             } else {
                 unsafe { winapi::um::winuser::ShowWindow(hwnd, 9); }
@@ -378,7 +378,7 @@ pub fn base_addr(handle: &Handle, params: &ConnectionParams) -> anyhow::Result<u
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
     #[cfg(feature = "logger")]
     log::info!("[DDCORE] reading base address: {} {proc_name}", handle.pid);
-    let addr = unsafe { get_base_address(handle.pid, proc_name) };
+    let addr = unsafe { get_base_address(Pid::from_u32(handle.pid as u32), proc_name) };
     #[cfg(feature = "logger")]
     log::info!("[DDCORE] base address: {addr:?}");
     addr
@@ -515,10 +515,10 @@ pub unsafe fn get_base_address(pid: Pid, _proc_name: String) -> anyhow::Result<u
 
     let snapshot = winapi::um::tlhelp32::CreateToolhelp32Snapshot(
         winapi::um::tlhelp32::TH32CS_SNAPMODULE | winapi::um::tlhelp32::TH32CS_SNAPMODULE32,
-        pid as winapi::shared::minwindef::DWORD,
+        pid.as_u32() as winapi::shared::minwindef::DWORD,
     );
 
-    let mut me = winapi::um::tlhelp32::MODULEENTRY32::default();
+    let mut me: winapi::um::tlhelp32::MODULEENTRY32 = std::mem::zeroed();
     me.dwSize = size_of_val(&me) as c_ulong as winapi::shared::minwindef::DWORD;
     winapi::um::tlhelp32::Module32First(snapshot, &mut me);
 

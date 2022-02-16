@@ -221,7 +221,6 @@ dependencies = [
  "base64",
  "block-modes",
  "bytestream",
- "crossbeam-utils",
  "futures",
  "hyper",
  "hyper-tls",

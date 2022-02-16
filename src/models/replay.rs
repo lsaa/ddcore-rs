@@ -2,7 +2,7 @@
 // replay file models and utils
 //
 
-use std::{io::Read, time::{SystemTime, Duration, UNIX_EPOCH}};
+use std::{io::{Read, Seek, SeekFrom}, time::{SystemTime, Duration, UNIX_EPOCH}};
 use anyhow::{Result, bail};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -629,6 +629,84 @@ impl DdRpl {
         self.extra = Some(old_extra);
 
         Ok(())
+    }
+
+    pub fn validate_reader<R: Read + Seek>(source: &mut R) -> Result<()> {
+        use bytestream::*;
+
+        source.read_exact(&mut [0u8; 0x6])?; // ddrpl.
+        let _file_version = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let timestamp = u64::read_from(source, ByteOrder::LittleEndian)?;
+        let _timestamp = UNIX_EPOCH + Duration::from_secs(1455753600 + timestamp);
+        let _time = read_f32(source)?;
+        let _starting_time = read_f32(source)?;
+        let _daggers_fired = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _death_type = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let _gems_collected = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _daggers_hit = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _kills = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _player_id = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let username_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let mut username = vec![0u8; username_len as usize];
+        source.read_exact(&mut username)?;
+        let _username = String::from_utf8(username)?;
+        source.read_exact(&mut [0u8; 10])?; // skip unknown
+        let mut spawnset_hash = [0u8; 16];
+        source.read_exact(&mut spawnset_hash)?;
+        let _spawnset_hash = crate::utils::md5_to_string_lower(&spawnset_hash);
+        let spawnset_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let mut spawnset_bin = vec![0u8; spawnset_len as usize];
+        source.read_exact(&mut spawnset_bin)?;
+        let compressed_data_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        if compressed_data_len > 40000000 {
+            bail!("Replay data is too big");
+        }
+        source.seek(SeekFrom::Current(compressed_data_len as i64))?;
+        if source.read(&mut [0u8; 1])? != 0 {
+            bail!("Invalid Replay File");
+        }
+        Ok(())
+    }
+
+    pub fn validate_reader_output_bin<R: Read + Seek>(source: &mut R) -> Result<Vec<u8>> {
+        use bytestream::*;
+
+        source.read_exact(&mut [0u8; 0x6])?; // ddrpl.
+        let _file_version = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let timestamp = u64::read_from(source, ByteOrder::LittleEndian)?;
+        let _timestamp = UNIX_EPOCH + Duration::from_secs(1455753600 + timestamp);
+        let _time = read_f32(source)?;
+        let _starting_time = read_f32(source)?;
+        let _daggers_fired = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _death_type = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let _gems_collected = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _daggers_hit = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _kills = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let _player_id = i32::read_from(source, ByteOrder::LittleEndian)?;
+        let username_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let mut username = vec![0u8; username_len as usize];
+        source.read_exact(&mut username)?;
+        let _username = String::from_utf8(username)?;
+        source.read_exact(&mut [0u8; 10])?; // skip unknown
+        let mut spawnset_hash = [0u8; 16];
+        source.read_exact(&mut spawnset_hash)?;
+        let _spawnset_hash = crate::utils::md5_to_string_lower(&spawnset_hash);
+        let spawnset_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        let mut spawnset_bin = vec![0u8; spawnset_len as usize];
+        source.read_exact(&mut spawnset_bin)?;
+        let compressed_data_len = u32::read_from(source, ByteOrder::LittleEndian)?;
+        if compressed_data_len > 40000000 {
+            bail!("Replay data is too big");
+        }
+        source.seek(SeekFrom::Current(compressed_data_len as i64))?;
+        if source.read(&mut [0u8; 1])? != 0 {
+            bail!("Invalid Replay File");
+        }
+        source.seek(SeekFrom::Start(0))?;
+
+        let mut out = vec![];
+        source.read_to_end(&mut out)?;
+        Ok(out)
     }
 
     pub fn from_reader<R: Read>(source: &mut R) -> Result<Self> {

@@ -16,7 +16,7 @@ default = []
 memory = ["serde_json", "process-memory", "sysinfo", "winapi", "scan_fmt"]
 ddinfo = ["serde_json", "hyper", "hyper-tls", "native-tls", "futures", "base64"]
 ddreplay = ["serde_json", "hyper", "hyper-tls", "native-tls", "futures", "base64"]
-ddcl_submit = ["aes", "block-modes", "pbkdf2", "ring", "base32", "base64"]
+ddcl_submit = ["aes", "cbc", "pbkdf2", "ring", "base32", "base64"]
 logger = []
 
 [dependencies]
@@ -34,7 +34,7 @@ hyper = { version = "0.14", optional = true, features = ["full"] }
 hyper-tls = { version = "0.5", optional = true }
 native-tls = { version = "0.2", optional = true }
 aes = { version = "0.8", optional = true }
-block-modes = { version = "0.9", optional = true }
+cbc = { version = "0.1.0", optional = true }
 pbkdf2 = { version = "0.10", default-features = false, optional = true }
 ring = { version = "0.16", optional = true }
 base32 = { version = "0.4", optional = true }

@@ -68,10 +68,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "block-modes"
-version = "0.9.1"
+name = "block-padding"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e2211b0817f061502a8dd9f11a37e879e79763e3c698d2418cf824d8cb2f21e"
+checksum = "5808df4b2412175c4db3afb115c83d8d0cd26ca4f30a042026cddef8580e526a"
+dependencies = [
+ "generic-array",
+]
 
 [[package]]
 name = "bumpalo"
@@ -98,6 +101,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04f720842a717d6afaf69fee2dc69b771edc165f12cc3eb1b0e8eeef53a86454"
 dependencies = [
  "byteorder",
+]
+
+[[package]]
+name = "cbc"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531051805c8ee7ea043a698cf0682318e76d8189c0445d4da2b9abb512024b98"
+dependencies = [
+ "cipher",
 ]
 
 [[package]]
@@ -218,8 +230,8 @@ dependencies = [
  "anyhow",
  "base32",
  "base64",
- "block-modes",
  "bytestream",
+ "cbc",
  "futures",
  "hyper",
  "hyper-tls",
@@ -513,6 +525,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1f03d4ab4d5dc9ec2d219f86c15d2a15fc08239d1cd3b2d6a19717c0a2f443"
 dependencies = [
+ "block-padding",
  "generic-array",
 ]
 

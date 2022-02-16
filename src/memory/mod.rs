@@ -7,7 +7,7 @@ use std::mem::size_of;
 use std::cell::RefCell;
 use std::process::Child;
 use anyhow::bail;
-use sysinfo::{Pid, ProcessExt, System, SystemExt};
+use sysinfo::{Pid, ProcessExt, System, SystemExt, PidExt};
 use crate::models::{StatsBlockWithFrames, StatsDataBlock, StatsFrame};
 
 use self::proc_mem_wrapper::Handle;
@@ -151,13 +151,13 @@ impl GameConnection {
         let mut proc = get_proc(&proc_name);
         if proc.is_none() { anyhow::bail!("Process not found") }
         let mut pid = proc.as_ref().unwrap().1;
-        let mut handle = Handle::new(pid as usize)?;
+        let mut handle = Handle::new(pid.as_u32() as usize)?;
         let mut c = None;
         if handle.copy_address(0, &mut [0u8]).is_err() && params.create_child{
             c = create_as_child(pid);
             proc = get_proc(&proc_name);
             pid = proc.as_ref().unwrap().1;
-            handle = Handle::new(pid as usize)?;
+            handle = Handle::new(pid.as_u32() as usize)?;
         }
         let base_address = base_addr(&handle, &params);
         if base_address.is_err() { anyhow::bail!("Couldn't get base address") }
@@ -177,7 +177,7 @@ impl GameConnection {
 
     pub fn dead_connection() -> Self {
         Self {
-            pid: 0,
+            pid: Pid::from_u32(0),
             base_address: 0,
             last_fetch: None,
             path: String::new(),
@@ -365,7 +365,7 @@ pub fn get_proc(process_name: &str) -> Option<(String, Pid)> {
     SYSTEM.with(|s| {
         let mut s = s.borrow_mut();
         s.refresh_processes();
-        if let Some(process) = s.process_by_name(process_name).first() {
+        if let Some(process) = s.processes_by_exact_name(process_name).next() {
             return Some((String::from(process.exe().to_str().unwrap()), process.pid()));
         }
         None
@@ -391,7 +391,7 @@ pub fn base_addr(handle: &Handle, params: &ConnectionParams) ->  anyhow::Result<
     use scan_fmt::scan_fmt;
     let os_info = OsInfo::get_from_os(&params.operating_system);
     let proc_name = params.overrides.process_name.as_ref().unwrap_or(&os_info.default_process_name).clone();
-    let pid = handle.pid as i32;
+    let pid = Pid::from_u32(handle.pid as u32);
     
     match &params.operating_system {
         OperatingSystem::Linux => get_base_address(pid, proc_name),
@@ -458,7 +458,7 @@ pub fn get_base_address(pid: Pid, proc_name: String) -> anyhow::Result<usize> {
     };
 
     let f = BufReader::new(File::open(format!("/proc/{}/maps", pid))?);
-    let handle = Handle::new(pid as usize)?;
+    let handle = Handle::new(pid.as_u32() as usize)?;
     let mut magic_buf = [0u8; 4];
 
     for line in f.lines().flatten() {

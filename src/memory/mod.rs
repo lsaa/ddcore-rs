@@ -507,6 +507,8 @@ unsafe extern "system" fn enumerate_callback(hwnd: winapi::shared::windef::HWND,
     if closure(hwnd) { TRUE } else { FALSE }
 }
 
+/// # Safety
+/// Winapi operation, self contained
 #[cfg(target_os = "windows")]
 pub unsafe fn get_base_address(pid: Pid, _proc_name: String) -> anyhow::Result<usize> {
     // This is miserable
@@ -522,14 +524,14 @@ pub unsafe fn get_base_address(pid: Pid, _proc_name: String) -> anyhow::Result<u
     me.dwSize = size_of_val(&me) as c_ulong as winapi::shared::minwindef::DWORD;
     winapi::um::tlhelp32::Module32First(snapshot, &mut me);
 
-    let res = me.modBaseAddr.clone() as usize;
+    let res = me.modBaseAddr as usize;
     CloseHandle(snapshot);
     Ok(res)
 }
 
 #[cfg(target_os = "windows")]
 fn _create_as_child(_pid: Pid) -> Option<Child> {
-    return None;
+    None
 }
 
 #[cfg(target_os = "linux")]

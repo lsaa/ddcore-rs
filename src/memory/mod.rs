@@ -130,8 +130,7 @@ impl GameConnection {
         let base_address = base_addr(&handle, &params);
         if base_address.is_err() { anyhow::bail!("Couldn't get base address") }
         let base_address = base_address.unwrap();
-        let mut ptrs = Pointers::default();
-        ptrs.base_address = Some(base_address);
+        let ptrs = Pointers { base_address: Some(base_address), ..Default::default() };
         Ok(Self {
             pid,
             handle,
@@ -497,6 +496,7 @@ pub fn enumerate_windows<F>(mut callback: F)
     unsafe { EnumWindows(Some(enumerate_callback), lparam) };
 }
 
+#[allow(clippy::transmute_ptr_to_ref)]
 #[cfg(target_os = "windows")]
 unsafe extern "system" fn enumerate_callback(hwnd: winapi::shared::windef::HWND, lparam: winapi::shared::minwindef::LPARAM) -> winapi::shared::minwindef::BOOL {
     use std::mem;

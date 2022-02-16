@@ -208,7 +208,7 @@ impl SubmitRunRequest {
             operating_system: get_os(),
             build_mode: "Release".to_owned(),
             client: client.to_string(),
-            validation: validation.replace("=", ""),
+            validation: validation.replace('=', ""),
             is_replay: run.block.is_replay,
             prohibited_mods: run.block.prohibited_mods,
             game_states: states,
@@ -277,13 +277,13 @@ pub mod crypto_encoder {
         pbkdf2::derive(
             pbkdf2::PBKDF2_HMAC_SHA1,
             n_iter,
-            &salt,
+            salt,
             password.as_bytes(),
             &mut pbkdf2_hash,
         );
-        let mut plain = plain.as_bytes();
+        let plain = plain.as_bytes();
         let mut buffer = [0_u8; 1000]; // big buffer
-        let cipher = match Aes128CbcEnc::new_from_slices(&pbkdf2_hash, &iv.as_bytes()) {
+        let cipher = match Aes128CbcEnc::new_from_slices(&pbkdf2_hash, iv.as_bytes()) {
             Ok(v) => Ok(v),
             Err(_) => Err(anyhow::anyhow!("Cipher Error")),
         }?;
@@ -291,7 +291,7 @@ pub mod crypto_encoder {
         buffer[..pos].copy_from_slice(plain);
         let ciphertext = match cipher.encrypt_padded_mut::<Pkcs7>(&mut buffer, pos) {
             Ok(v) => Ok(v),
-            Err(e) => Err(anyhow::anyhow!("Ciphertext Err")),
+            Err(_e) => Err(anyhow::anyhow!("Ciphertext Err")),
         }?;
         Ok(base32::encode(RFC4648 { padding: true }, ciphertext))
     }

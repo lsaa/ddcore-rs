@@ -87,7 +87,7 @@ pub async fn get_tool<T: ToString>(tool_name: T) -> Result<Tool> {
 pub async fn get_integration_ddstats_rust() -> Result<DdstatsRustIntegration> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let path = format!("api/integrations/ddstats-rust");
+    let path = "api/integrations/ddstats-rust".to_string();
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()
         .header("accept", "application/json")
@@ -233,9 +233,9 @@ pub async fn get_spawnset_by_hash<T: ToString>(hash: T) -> Result<SpawnsetForDdc
     let client = Client::builder().build::<_, hyper::Body>(https);
     let vv = crate::utils::decode_hex(&hash.to_string())?;
     let b = base64::encode(vv)
-        .replace("=", "%3D")
-        .replace("/", "%2F")
-        .replace("+", "%2B");
+        .replace('=', "%3D")
+        .replace('/', "%2F")
+        .replace('+', "%2B");
     let path = format!("api/spawnsets/by-hash?hash={}", b);
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()

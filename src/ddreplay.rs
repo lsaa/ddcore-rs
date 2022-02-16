@@ -18,7 +18,7 @@ struct DDReplayUploadRequest {
 pub async fn upload_replay(replay: Arc<Vec<u8>>, manual: bool) -> Result<()> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-    let path = format!("upload");
+    let path = "upload".to_string();
     let uri = format!("https://ddreplay.herokuapp.com/{}", path);
     let req = DDReplayUploadRequest {
         data: base64::encode(&*replay),

@@ -127,7 +127,7 @@ impl Handle {
     #[cfg(target_os = "linux")]
     pub fn new(pid: usize) -> Result<Self> {
         Ok(Self {
-            inner: process_memory::Pid::from(pid as i32).try_into_process_handle()?,
+            inner: (pid as i32).try_into_process_handle()?,
             pid
         })
     }

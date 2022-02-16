@@ -3,7 +3,7 @@ use std::{fs::File, io::{BufWriter, Write}};
 use ddcore_rs::models::spawnset::{Spawnset, V3Enemies};
 
 fn main() -> anyhow::Result<()> {
-    let spawnset_file = std::env::args().skip(1).next().unwrap();
+    let spawnset_file = std::env::args().nth(1).unwrap();
     let mut spawnset_file = File::open(spawnset_file)?;
     let spawnset = Spawnset::<V3Enemies>::deserialize(&mut spawnset_file)?;
     println!("{:#?}", spawnset);

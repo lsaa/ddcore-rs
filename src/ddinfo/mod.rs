@@ -259,6 +259,32 @@ pub async fn get_spawnset_by_hash<T: ToString>(hash: T) -> Result<SpawnsetForDdc
 ////////////////////////////////// Custom Leaderboards
 //////////////////////////////////
 
+pub async fn custom_leaderboard_exists<T: ToString>(hash: T) -> Result<()> {
+    let https = HttpsConnector::new();
+    let client = Client::builder().build::<_, hyper::Body>(https);
+    let vv = crate::utils::decode_hex(&hash.to_string())?;
+    let b = base64::encode(vv)
+        .replace('=', "%3D")
+        .replace('/', "%2F")
+        .replace('+', "%2B");
+    let path = format!("api/custom-leaderboards?hash={}", b);
+    let uri = format!("https://devildaggers.info/{}", path);
+    let req = Request::builder()
+        .method(Method::HEAD)
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap();
+    let mut res = client.request(req).await?;
+    let mut body = Vec::new();
+    while let Some(chunk) = res.body_mut().next().await {
+        body.extend_from_slice(&chunk?);
+    }
+    if res.status() != 200 {
+        unsafe { bail!(String::from_utf8_unchecked(body)); }
+    }
+    Ok(())
+}
+
 pub async fn get_replay_by_id(entry_id: i32) -> Result<Vec<u8>> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
@@ -279,3 +305,4 @@ pub async fn get_replay_by_id(entry_id: i32) -> Result<Vec<u8>> {
     }
     Ok(body)
 }
+

@@ -95,6 +95,8 @@ pub struct GameState {
     pub orbs_killed: Vec<i32>,
     pub thorns_killed: Vec<i32>,
     pub ghostpedes_killed: Vec<i32>,
+    pub spider_eggs_alive: Vec<i32>,
+    pub spider_eggs_killed: Vec<i32>,
 }
 
 impl SubmitRunRequest {
@@ -136,6 +138,7 @@ impl SubmitRunRequest {
             orbs_alive: run.frames.iter().map(|f| f.per_enemy_alive_count[13] as i32).collect(),
             thorns_alive: run.frames.iter().map(|f| f.per_enemy_alive_count[14] as i32).collect(),
             ghostpedes_alive: run.frames.iter().map(|f| f.per_enemy_alive_count[15] as i32).collect(),
+            spider_eggs_alive: run.frames.iter().map(|f| f.per_enemy_alive_count[16] as i32).collect(),
             skull1s_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[0] as i32).collect(),
             skull2s_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[1] as i32).collect(),
             skull3s_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[2] as i32).collect(),
@@ -152,6 +155,7 @@ impl SubmitRunRequest {
             orbs_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[13] as i32).collect(),
             thorns_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[14] as i32).collect(),
             ghostpedes_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[15] as i32).collect(),
+            spider_eggs_killed: run.frames.iter().map(|f| f.per_enemy_kill_count[16] as i32).collect(),
         };
 
         let sec = secrets.unwrap();

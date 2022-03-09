@@ -2,7 +2,7 @@
 // Submissions to DD Custom Leaderboards
 //
         
-use crate::models::StatsBlockWithFrames;
+use crate::models::{StatsBlockWithFrames, GameMode};
 use anyhow::bail;
 use hyper::{Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
@@ -48,6 +48,8 @@ pub struct SubmitRunRequest {
     pub status: i32,
     pub replay_data: String,
     pub replay_player_id: i32,
+    pub game_mode: GameMode,
+    pub time_attack_or_race_finished: bool,
 }
 
 #[derive(serde::Serialize, Debug, Default)]
@@ -218,6 +220,11 @@ impl SubmitRunRequest {
             status: run.block.status,
             replay_data: replay_bin,
             replay_player_id: run.block.replay_player_id,
+            game_mode: run.block.game_mode.into(),
+            // TODO: !!!!!!! !!!!!!!!!!! !!!!!!!!!!!!!!!! !!!!!!! 
+            // TODO: """"""""""""""""""""""""""""""""""""""""""""
+            // TODO: Remove this shit when the linux update drops
+            time_attack_or_race_finished: if cfg!(target_os = "linux") { false } else { run.block.is_time_attack_or_race_finished },
         })
     }
 }

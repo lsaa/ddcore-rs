@@ -10,6 +10,30 @@ use std::fmt::Write;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+#[derive(Debug, FromPrimitive, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum GameMode {
+    Survival = 0,
+    TimeAttack,
+    Race,
+}
+
+impl std::default::Default for GameMode {
+    fn default() -> Self {
+        GameMode::Survival
+    }
+}
+
+impl std::convert::From<u8> for GameMode {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => GameMode::Survival,
+            1 => GameMode::TimeAttack,
+            2 => GameMode::Race,
+            _ => GameMode::default(),
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct StatsDataBlock {
@@ -61,7 +85,9 @@ pub struct StatsDataBlock {
     padding3: [u8; 3],
     pub replay_base: [u8; 8],
     pub replay_buffer_length: i32,
-    pub replay_flag: bool
+    pub replay_flag: bool,
+    pub game_mode: u8,
+    pub is_time_attack_or_race_finished: bool
 }
 
 #[repr(C)]

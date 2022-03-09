@@ -2,7 +2,7 @@
 // Submissions to DD Custom Leaderboards
 //
         
-use crate::{models::{StatsBlockWithFrames, GameMode}, client_https};
+use crate::{models::StatsBlockWithFrames, client_https};
 use anyhow::bail;
 use hyper::{Body, Client, Method, Request};
 use futures::StreamExt;
@@ -47,7 +47,7 @@ pub struct SubmitRunRequest {
     pub status: i32,
     pub replay_data: String,
     pub replay_player_id: i32,
-    pub game_mode: GameMode,
+    pub game_mode: u8,
     pub time_attack_or_race_finished: bool,
 }
 
@@ -219,7 +219,7 @@ impl SubmitRunRequest {
             status: run.block.status,
             replay_data: replay_bin,
             replay_player_id: run.block.replay_player_id,
-            game_mode: run.block.game_mode.into(),
+            game_mode: run.block.game_mode,
             // TODO: !!!!!!! !!!!!!!!!!! !!!!!!!!!!!!!!!! !!!!!!! 
             // TODO: """"""""""""""""""""""""""""""""""""""""""""
             // TODO: Remove this shit when the linux update drops

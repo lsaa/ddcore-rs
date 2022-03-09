@@ -2,10 +2,9 @@
 // Submissions to DD Custom Leaderboards
 //
         
-use crate::models::{StatsBlockWithFrames, GameMode};
+use crate::{models::{StatsBlockWithFrames, GameMode}, client_https};
 use anyhow::bail;
 use hyper::{Body, Client, Method, Request};
-use hyper_tls::HttpsConnector;
 use futures::StreamExt;
 use crate::ddinfo::{time_as_int, get_os};
 use super::models::OperatingSystem;
@@ -242,8 +241,7 @@ pub async fn submit<T: ToString, K: ToString>(
 
     let req = SubmitRunRequest::from_compiled_run(data, secrets, client, version, replay_bin);
     if req.is_ok() {
-        let https = HttpsConnector::new();
-        let client = Client::builder().build(https);
+        let client: Client<_, hyper::Body> = client_https!();
         let path = "api/custom-entries/submit";
         let uri = format!("https://devildaggers.info/{}", path);
         let req = Request::builder()

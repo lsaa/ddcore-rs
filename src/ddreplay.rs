@@ -6,8 +6,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures::StreamExt;
 use hyper::{Client, Method, Body, Request};
-use hyper_tls::HttpsConnector;
 use serde::Serialize;
+
+use crate::client_https;
 
 #[derive(Debug, Serialize, Clone)]
 struct DDReplayUploadRequest {
@@ -16,8 +17,7 @@ struct DDReplayUploadRequest {
 }
 
 pub async fn upload_replay(replay: Arc<Vec<u8>>, manual: bool) -> Result<()> {
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
+    let client: Client<_, hyper::Body> = client_https!();
     let path = "upload".to_string();
     let uri = format!("https://ddreplay.herokuapp.com/{}", path);
     let req = DDReplayUploadRequest {
@@ -44,9 +44,8 @@ pub async fn upload_replay(replay: Arc<Vec<u8>>, manual: bool) -> Result<()> {
 }
 
 pub async fn create_ddstats_trace<T: ToString>(game_id: u64, replay_hash: T) -> Result<()> {
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
     let path = format!("trace?id={}&md5_hash={}", game_id, replay_hash.to_string());
+    let client: Client<_, hyper::Body> = client_https!();
     let uri = format!("https://ddreplay.herokuapp.com/{}", path);
     let req = Request::builder()
         .method(Method::POST)

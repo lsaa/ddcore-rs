@@ -60,6 +60,26 @@ pub unsafe fn writer_buf<'a, T: Sized>(source: &mut T) -> &'a mut [u8] {
     std::slice::from_raw_parts_mut(source as *mut _ as *mut u8, size_of::<T>())
 }
 
+#[macro_export]
+macro_rules! client_https {
+    () => {
+        {
+            use hyper_rustls::ConfigBuilderExt;
+            let tls = rustls::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_native_roots()
+                .with_no_client_auth();
+            let https = hyper_rustls::HttpsConnectorBuilder::new()
+                .with_tls_config(tls)
+                .https_or_http()
+                .enable_http1()
+                .build();
+            let client: Client<_, hyper::Body> = Client::builder().build(https);
+            client
+        }
+    };
+}
+
 ////////////////////////////////// C# Version String
 //////////////////////////////////
 

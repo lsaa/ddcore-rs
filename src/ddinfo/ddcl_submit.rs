@@ -188,8 +188,8 @@ impl SubmitRunRequest {
             time_as_int(run.block.time_lvl3).to_string(), // TODO: As bytes
             time_as_int(run.block.time_lvl4).to_string(), // TODO: As bytes
             last.game_mode,
-            last.time_attack_or_race_finished,
-            last.prohibited_mods,
+            if last.time_attack_or_race_finished { "True".to_owned() } else { "False".to_owned() },
+            if last.prohibited_mods { "True".to_owned() } else { "False".to_owned() },
         ]
         .join(";");
 

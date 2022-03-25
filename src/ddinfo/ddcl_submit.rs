@@ -181,7 +181,7 @@ impl SubmitRunRequest {
             last.daggers_fired.to_string(),
             last.homing.to_string(),
             last.daggers_eaten.to_string(),
-            if run.block.is_replay { "1".to_owned() } else { "0".to_owned() },
+            if run.block.is_replay { "True".to_owned() } else { "False".to_owned() },
             last.status,
             crate::utils::md5_to_string(&run.block.survival_md5[..]),
             time_as_int(run.block.time_lvl2).to_string(), // TODO: As bytes

@@ -12,7 +12,7 @@ use super::models::OperatingSystem;
 pub struct DdclSecrets {
     pub iv: String,
     pub pass: String,
-    pub salt: String
+    pub salt: String,
 }
 
 #[derive(serde::Serialize, Debug)]
@@ -21,26 +21,31 @@ pub struct SubmitRunRequest {
     pub survival_hash_md5: String,
     pub player_id: i32,
     pub player_name: String,
-    pub time: i32,
+    pub time_in_seconds: f32,
+    pub time_as_bytes: String,
     pub gems_collected: i32,
     pub enemies_killed: i32,
     pub daggers_fired: i32,
     pub daggers_hit: i32,
     pub enemies_alive: i32,
-    pub homing_daggers: i32,
-    pub homing_daggers_eaten: i32,
+    pub homing_stored: i32,
+    pub homing_eaten: i32,
     pub gems_despawned: i32,
     pub gems_eaten: i32,
     pub gems_total: i32,
     pub death_type: u8,
-    pub level_up_time2: i32,
-    pub level_up_time3: i32,
-    pub level_up_time4: i32,
+    pub level_up_time2_in_seconds: f32,
+    pub level_up_time3_in_seconds: f32,
+    pub level_up_time4_in_seconds: f32,
+    pub level_up_time2_as_bytes: String,
+    pub level_up_time3_as_bytes: String,
+    pub level_up_time4_as_bytes: String,
     pub client_version: String,
     pub operating_system: OperatingSystem,
     pub build_mode: String,
     pub client: String,
     pub validation: String,
+    pub validation_version: i32,
     pub is_replay: bool,
     pub prohibited_mods: bool,
     pub game_data: GameState,
@@ -59,8 +64,8 @@ pub struct GameState {
     pub daggers_fired: Vec<i32>,
     pub daggers_hit: Vec<i32>,
     pub enemies_alive: Vec<i32>,
-    pub homing_daggers: Vec<i32>,
-    pub homing_daggers_eaten: Vec<i32>,
+    pub homing_stored: Vec<i32>,
+    pub homing_eaten: Vec<i32>,
     pub gems_despawned: Vec<i32>,
     pub gems_eaten: Vec<i32>,
     pub gems_total: Vec<i32>,
@@ -103,10 +108,10 @@ pub struct GameState {
 impl SubmitRunRequest {
     pub fn from_compiled_run<T: ToString, K: ToString>(
         run: std::sync::Arc<StatsBlockWithFrames>,
-        secrets: Option<DdclSecrets>, 
-        client: T, 
+        secrets: Option<DdclSecrets>,
+        client: T,
         version: K,
-        replay_bin: std::sync::Arc<Vec<u8>>
+        replay_bin: std::sync::Arc<Vec<u8>>,
     ) -> anyhow::Result<Self> {
         if secrets.is_none() {
             bail!("Missing DDCL Secrets");
@@ -118,8 +123,8 @@ impl SubmitRunRequest {
             daggers_fired: run.frames.iter().map(|f| f.daggers_fired).collect(),
             daggers_hit: run.frames.iter().map(|f| f.daggers_hit).collect(),
             enemies_alive: run.frames.iter().map(|f| f.enemies_alive).collect(),
-            homing_daggers: run.frames.iter().map(|f| f.homing).collect(),
-            homing_daggers_eaten: run.frames.iter().map(|f| f.daggers_eaten).collect(),
+            homing_stored: run.frames.iter().map(|f| f.homing).collect(),
+            homing_eaten: run.frames.iter().map(|f| f.daggers_eaten).collect(),
             gems_despawned: run.frames.iter().map(|f| f.gems_despawned).collect(),
             gems_eaten: run.frames.iter().map(|f| f.gems_eaten).collect(),
             gems_total: run.frames.iter().map(|f| f.gems_total).collect(),
@@ -164,55 +169,60 @@ impl SubmitRunRequest {
 
         let to_encrypt = vec![
             run.block.player_id.to_string(),
-            time_as_int(run.block.time).to_string(),
+            time_as_int(run.block.time).to_string(), // TODO: As bytes
             last.gems_collected.to_string(),
             last.gems_despawned.to_string(),
             last.gems_eaten.to_string(),
             last.gems_total.to_string(),
+            last.enemies_alive.to_string(),
             last.kills.to_string(),
             run.block.death_type.to_string(),
             last.daggers_hit.to_string(),
             last.daggers_fired.to_string(),
-            last.enemies_alive.to_string(),
             last.homing.to_string(),
             last.daggers_eaten.to_string(),
-            if run.block.is_replay { "1".to_owned() } else { "0".to_owned() },
+            if run.block.is_replay { "True".to_owned() } else { "False".to_owned() },
+            last.status,
             crate::utils::md5_to_string(&run.block.survival_md5[..]),
-            vec![
-                time_as_int(run.block.time_lvl2).to_string(),
-                time_as_int(run.block.time_lvl3).to_string(),
-                time_as_int(run.block.time_lvl4).to_string()
-            ].join(",")
-        ].join(";");
+            time_as_int(run.block.time_lvl2).to_string(), // TODO: As bytes
+            time_as_int(run.block.time_lvl3).to_string(), // TODO: As bytes
+            time_as_int(run.block.time_lvl4).to_string(), // TODO: As bytes
+            last.game_mode,
+            if last.time_attack_or_race_finished { "True".to_owned() } else { "False".to_owned() },
+            if last.prohibited_mods { "True".to_owned() } else { "False".to_owned() },
+        ]
+        .join(";");
 
         let validation = crypto_encoder::encrypt_and_encode(to_encrypt, sec.pass, sec.salt, sec.iv)?;
         
         let replay_bin = base64::encode(&replay_bin[..]);
 
+        // TODO: Add time_as_bytes, etc.
         Ok(Self {
             survival_hash_md5: base64::encode(&run.block.survival_md5),
             player_id: run.block.player_id,
             player_name: run.block.player_username(),
-            time: time_as_int(run.block.time),
+            time_in_seconds: run.block.time,
             gems_collected: last.gems_collected,
             enemies_killed: last.kills,
             daggers_fired: last.daggers_fired,
             daggers_hit: last.daggers_hit,
             enemies_alive: last.enemies_alive,
-            homing_daggers: last.homing,
-            homing_daggers_eaten: last.daggers_eaten,
+            homing_stored: last.homing,
+            homing_eaten: last.daggers_eaten,
             gems_despawned: last.gems_despawned,
             gems_eaten: last.gems_eaten,
             gems_total: last.gems_total,
             death_type: run.block.death_type,
-            level_up_time2: time_as_int(run.block.time_lvl2),
-            level_up_time3: time_as_int(run.block.time_lvl3),
-            level_up_time4: time_as_int(run.block.time_lvl4),
+            level_up_time2_in_seconds: run.block.time_lvl2,
+            level_up_time3_in_seconds: run.block.time_lvl3,
+            level_up_time4_in_seconds: run.block.time_lvl4,
             client_version: version.to_string(),
             operating_system: get_os(),
             build_mode: "Release".to_owned(),
             client: client.to_string(),
             validation: validation.replace('=', ""),
+            validation_version: 2,
             is_replay: run.block.is_replay,
             prohibited_mods: run.block.prohibited_mods,
             game_data,

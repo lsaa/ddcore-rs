@@ -12,7 +12,7 @@ use hyper::{Body, Client, Method, Request};
 use futures::StreamExt;
 use crate::{ddinfo::models::{DdstatsRustIntegration, Entry, Leaderboard, SpawnsetFile, SpawnsetForDdcl}, client_https};
 
-use self::models::{OperatingSystem, MarkerResponse, Tool, GetSpawnsetByHash};
+use self::models::{OperatingSystem, MarkerResponse, Tool};
 
 #[cfg(target_os = "windows")]
 pub fn get_os() -> OperatingSystem {
@@ -256,7 +256,7 @@ pub async fn custom_leaderboard_exists<T: ToString>(hash: T) -> Result<()> {
         .replace('=', "%3D")
         .replace('/', "%2F")
         .replace('+', "%2B");
-    let path = format!("api/spawnsets/by-hash?hash={}", b);
+    let path = format!("api/ddcl/custom-leaderboards/exists?hash={}", b);
     let uri = format!("https://devildaggers.info/{}", path);
     let req = Request::builder()
         .method(Method::HEAD)
@@ -270,10 +270,6 @@ pub async fn custom_leaderboard_exists<T: ToString>(hash: T) -> Result<()> {
     }
     if res.status() != 200 {
         unsafe { bail!(String::from_utf8_unchecked(body)); }
-    }
-    let res: GetSpawnsetByHash = serde_json::from_slice(&body)?;
-    if res.custom_leaderboard.is_none() {
-        bail!("No custom leaderboard");
     }
     Ok(())
 }

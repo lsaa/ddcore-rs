@@ -169,7 +169,7 @@ impl SubmitRunRequest {
 
         let to_encrypt = vec![
             run.block.player_id.to_string(),
-            base64::encode(run.block.time.to_le_bytes()).to_string(), 
+            crate::utils::md5_to_string(&run.block.time.to_le_bytes()[..]),
             last.gems_collected.to_string(),
             last.gems_despawned.to_string(),
             last.gems_eaten.to_string(),
@@ -184,17 +184,20 @@ impl SubmitRunRequest {
             if run.block.is_replay { "True".to_owned() } else { "False".to_owned() },
             run.block.status.to_string(),
             crate::utils::md5_to_string(&run.block.survival_md5[..]),
-            base64::encode(run.block.time_lvl2.to_le_bytes()),
-            base64::encode(run.block.time_lvl3.to_le_bytes()),
-            base64::encode(run.block.time_lvl4.to_le_bytes()),
+            crate::utils::md5_to_string(&run.block.time_lvl2.to_le_bytes()[..]),
+            crate::utils::md5_to_string(&run.block.time_lvl3.to_le_bytes()[..]),
+            crate::utils::md5_to_string(&run.block.time_lvl4.to_le_bytes()[..]),
             run.block.game_mode.to_string(),
-            if run.block.is_time_attack_or_race_finished { "True".to_owned() } else { "False".to_owned() },
+            // TODO: !!!!!!! !!!!!!!!!!! !!!!!!!!!!!!!!!! !!!!!!!
+            // TODO: """"""""""""""""""""""""""""""""""""""""""""
+            // TODO: Remove this shit when the linux update drops
+            if run.block.is_time_attack_or_race_finished && !cfg!(target_os = "linux") { "True".to_owned() } else { "False".to_owned() },
             if run.block.prohibited_mods { "True".to_owned() } else { "False".to_owned() },
         ]
         .join(";");
 
         let validation = crypto_encoder::encrypt_and_encode(to_encrypt, sec.pass, sec.salt, sec.iv)?;
-        
+
         let replay_bin = base64::encode(&replay_bin[..]);
 
         Ok(Self {
@@ -233,7 +236,7 @@ impl SubmitRunRequest {
             replay_data: replay_bin,
             replay_player_id: run.block.replay_player_id,
             game_mode: run.block.game_mode,
-            // TODO: !!!!!!! !!!!!!!!!!! !!!!!!!!!!!!!!!! !!!!!!! 
+            // TODO: !!!!!!! !!!!!!!!!!! !!!!!!!!!!!!!!!! !!!!!!!
             // TODO: """"""""""""""""""""""""""""""""""""""""""""
             // TODO: Remove this shit when the linux update drops
             time_attack_or_race_finished: if cfg!(target_os = "linux") { false } else { run.block.is_time_attack_or_race_finished },
@@ -243,7 +246,7 @@ impl SubmitRunRequest {
 
 pub async fn submit<T: ToString, K: ToString>(
     data: std::sync::Arc<StatsBlockWithFrames>,
-    secrets: Option<DdclSecrets>, 
+    secrets: Option<DdclSecrets>,
     client: T, 
     version: K, 
     replay_bin: std::sync::Arc<Vec<u8>>

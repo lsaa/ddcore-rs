@@ -12,7 +12,7 @@ use hyper::{Body, Client, Method, Request};
 use futures::StreamExt;
 use crate::{ddinfo::models::{DdstatsRustIntegration, Entry, Leaderboard, SpawnsetFile, SpawnsetForDdcl}, client_https};
 
-use self::models::{OperatingSystem, MarkerResponse, Tool, GetSpawnsetByHash, GetSpawnsetByHash};
+use self::models::{OperatingSystem, MarkerResponse, Tool, GetSpawnsetByHash};
 
 #[cfg(target_os = "windows")]
 pub fn get_os() -> OperatingSystem {

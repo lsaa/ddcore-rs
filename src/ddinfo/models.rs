@@ -68,6 +68,14 @@ pub struct SpawnsetFile {
 
 #[derive(serde::Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct GetSpawnsetByHash {
+    pub name: String,
+    pub author_name: String,
+    pub custom_leaderboard: Option<String>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct SpawnsetData {
     pub spawn_version: i32,
     pub world_version: i32,

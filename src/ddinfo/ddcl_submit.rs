@@ -6,7 +6,7 @@ use crate::{models::StatsBlockWithFrames, client_https};
 use anyhow::bail;
 use hyper::{Body, Client, Method, Request};
 use futures::StreamExt;
-use crate::ddinfo::{time_as_int, get_os};
+use crate::ddinfo::get_os;
 use super::models::OperatingSystem;
 
 pub struct DdclSecrets {
@@ -169,7 +169,7 @@ impl SubmitRunRequest {
 
         let to_encrypt = vec![
             run.block.player_id.to_string(),
-            time_as_int(run.block.time).to_string(), // TODO: As bytes
+            base64::encode(run.block.time.to_le_bytes()).to_string(), 
             last.gems_collected.to_string(),
             last.gems_despawned.to_string(),
             last.gems_eaten.to_string(),
@@ -182,14 +182,14 @@ impl SubmitRunRequest {
             last.homing.to_string(),
             last.daggers_eaten.to_string(),
             if run.block.is_replay { "True".to_owned() } else { "False".to_owned() },
-            last.status,
+            run.block.status.to_string(),
             crate::utils::md5_to_string(&run.block.survival_md5[..]),
-            time_as_int(run.block.time_lvl2).to_string(), // TODO: As bytes
-            time_as_int(run.block.time_lvl3).to_string(), // TODO: As bytes
-            time_as_int(run.block.time_lvl4).to_string(), // TODO: As bytes
-            last.game_mode,
-            if last.time_attack_or_race_finished { "True".to_owned() } else { "False".to_owned() },
-            if last.prohibited_mods { "True".to_owned() } else { "False".to_owned() },
+            base64::encode(run.block.time_lvl2.to_le_bytes()),
+            base64::encode(run.block.time_lvl3.to_le_bytes()),
+            base64::encode(run.block.time_lvl4.to_le_bytes()),
+            run.block.game_mode.to_string(),
+            if run.block.is_time_attack_or_race_finished { "True".to_owned() } else { "False".to_owned() },
+            if run.block.prohibited_mods { "True".to_owned() } else { "False".to_owned() },
         ]
         .join(";");
 
@@ -197,12 +197,12 @@ impl SubmitRunRequest {
         
         let replay_bin = base64::encode(&replay_bin[..]);
 
-        // TODO: Add time_as_bytes, etc.
         Ok(Self {
             survival_hash_md5: base64::encode(&run.block.survival_md5),
             player_id: run.block.player_id,
             player_name: run.block.player_username(),
             time_in_seconds: run.block.time,
+            time_as_bytes: base64::encode(run.block.time.to_le_bytes()),
             gems_collected: last.gems_collected,
             enemies_killed: last.kills,
             daggers_fired: last.daggers_fired,
@@ -215,8 +215,11 @@ impl SubmitRunRequest {
             gems_total: last.gems_total,
             death_type: run.block.death_type,
             level_up_time2_in_seconds: run.block.time_lvl2,
+            level_up_time2_as_bytes: base64::encode(run.block.time_lvl2.to_le_bytes()),
             level_up_time3_in_seconds: run.block.time_lvl3,
+            level_up_time3_as_bytes: base64::encode(run.block.time_lvl3.to_le_bytes()),
             level_up_time4_in_seconds: run.block.time_lvl4,
+            level_up_time4_as_bytes: base64::encode(run.block.time_lvl4.to_le_bytes()),
             client_version: version.to_string(),
             operating_system: get_os(),
             build_mode: "Release".to_owned(),

@@ -2,8 +2,6 @@
 // Smilers! :)
 //
 
-#![feature(io_safety)]
-
 pub mod utils;
 pub mod models;
 pub extern crate md5;

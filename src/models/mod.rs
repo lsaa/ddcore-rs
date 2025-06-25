@@ -4,6 +4,7 @@
 
 pub mod replay;
 pub mod spawnset;
+pub mod asset;
 
 use crate::utils;
 use std::fmt::Write;
@@ -186,7 +187,7 @@ impl StatsBlockWithFrames {
     }
 }
 
-#[derive(FromPrimitive, Debug, PartialEq, Clone, Copy)]
+#[derive(FromPrimitive, Debug, PartialEq, Clone, Copy, Eq)]
 pub enum GameStatus {
     Title = 0,
     Menu,
